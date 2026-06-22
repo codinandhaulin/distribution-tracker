@@ -755,9 +755,9 @@ function renderCalendar() {
 
   // Build event map: 'YYYY-MM-DD' -> [{symbol, type}]
   const events = {};
-  const addEv = (date, symbol, type, amount, est = false) => {
+  const addEv = (date, symbol, type, amount, est = false, perShare = null, prevPerShare = null) => {
     if (!date) return;
-    (events[date] ??= []).push({ symbol, type, amount, est });
+    (events[date] ??= []).push({ symbol, type, amount, est, perShare, prevPerShare });
   };
   const calNow   = new Date();
   const todayStr = `${calNow.getFullYear()}-${String(calNow.getMonth()+1).padStart(2,'0')}-${String(calNow.getDate()).padStart(2,'0')}`;
@@ -768,12 +768,14 @@ function renderCalendar() {
     if (!d) continue;
 
     // ── Actual history: plot real ex-dates and pay-dates ──
-    for (const h of (d.history || [])) {
+    const hist = d.history || [];
+    for (let i = 0; i < hist.length; i++) {
+      const h = hist[i], prev = hist[i + 1]; // history is newest-first; prev is older
       if (h.date.startsWith(monthPfx))
         addEv(h.date, symbol, 'ex');
       if (h.payDate && h.payDate.startsWith(monthPfx)) {
         const payAmt = (h.amount && shares) ? shares * h.amount : null;
-        addEv(h.payDate, symbol, 'pay', payAmt);
+        addEv(h.payDate, symbol, 'pay', payAmt, false, h.amount ?? null, prev?.amount ?? null);
       }
     }
 
@@ -792,8 +794,9 @@ function renderCalendar() {
       if (payOffsetDays !== null) {
         const payDate = new Date(new Date(exDate + 'T12:00:00Z').getTime() + payOffsetDays * 86400000)
           .toISOString().split('T')[0];
-        const payAmt = (d.distributionAmount && shares) ? shares * d.distributionAmount : null;
-        addEv(payDate, symbol, 'pay', payAmt, true);
+        const payAmt     = (d.distributionAmount && shares) ? shares * d.distributionAmount : null;
+        const prevPerSh  = hist[0]?.amount ?? null;
+        addEv(payDate, symbol, 'pay', payAmt, true, d.distributionAmount ?? null, prevPerSh);
       }
     }
   }
@@ -829,11 +832,28 @@ function renderCalendar() {
       return 0;
     });
     return evs.map(e => {
-      const label = e.type === 'pay' && e.amount ? `${e.symbol} ${fmt$(e.amount)}` : e.symbol;
       const chipClass = e.type === 'pay' ? (e.est ? 'chip-pay-est' : 'chip-pay') : `chip-${e.type}`;
-      const title = e.type === 'pay'
-        ? `${e.est ? 'Estimated pay' : 'Pay'}-date · ${e.symbol}`
-        : `Ex-date · ${e.symbol}`;
+
+      if (e.type !== 'pay') {
+        return `<span class="cal-chip ${chipClass}" title="Ex-date · ${e.symbol}">${e.symbol}</span>`;
+      }
+
+      // Build delta indicator (per-share comparison)
+      let deltaHtml = '', titleExtra = '';
+      if (e.perShare != null && e.prevPerShare != null && e.prevPerShare !== 0) {
+        const pct = (e.perShare - e.prevPerShare) / e.prevPerShare * 100;
+        if (Math.abs(pct) >= 0.1) {
+          const up    = pct > 0;
+          const color = up ? 'var(--green-hi)' : 'var(--red)';
+          const arrow = up ? '▲' : '▼';
+          deltaHtml   = ` <span style="font-size:.82em;opacity:.85;color:${color}">${arrow}${Math.abs(pct).toFixed(1)}%</span>`;
+          titleExtra  = ` — Prev: ${fmt$(e.prevPerShare, 4)}/sh → ${fmt$(e.perShare, 4)}/sh (${up ? '+' : ''}${pct.toFixed(1)}%)`;
+        }
+      }
+
+      const amtStr  = e.amount ? ` ${fmt$(e.amount)}` : '';
+      const label   = `${e.symbol}${amtStr}${deltaHtml}`;
+      const title   = `${e.est ? 'Estimated pay' : 'Pay'}-date · ${e.symbol}${titleExtra}`;
       return `<span class="cal-chip ${chipClass}" title="${title}">${label}</span>`;
     }).join('');
   }

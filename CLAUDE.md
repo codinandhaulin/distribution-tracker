@@ -73,6 +73,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Pay chips are slightly larger font (12px) than ex-date chips (10px)
 - Chip colors: red = declared ex-date, purple = estimated ex-date, green = confirmed pay date, grey/italic = estimated pay date
 - Weekly subtotals and monthly total shown
+- Pay chips show inline delta vs prior distribution: `▲6.2%` (green) or `▼3.1%` (red) when a prior exists; tooltip shows per-share dollar detail ("Prev: $0.48/sh → $0.51/sh (+6.2%)")
 
 ### Add / Import card
 - Collapsible — auto-collapsed on load when portfolio exists, auto-expanded when empty
