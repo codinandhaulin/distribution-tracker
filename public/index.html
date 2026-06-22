@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distribution Tracker</title>
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface-2: #21262d;
+      --border:    #30363d;
+      --text:      #c9d1d9;
+      --muted:     #8b949e;
+      --dim:       #484f58;
+      --green:     #3fb950;
+      --green-hi:  #56d364;
+      --amber:     #d29922;
+      --amber-hi:  #e3b341;
+      --red:       #f85149;
+      --blue:      #58a6ff;
+      --font:  -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono:  'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-inner {
+      max-width: 1500px; margin: 0 auto; padding: 0 24px;
+      height: 56px; display: flex; align-items: center;
+      justify-content: space-between; gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon { width: 26px; height: 26px; color: var(--green); flex-shrink: 0; }
+    .brand h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    #last-updated { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--text); font-size: 13px;
+      font-family: var(--font); cursor: pointer; white-space: nowrap;
+      transition: background .12s, border-color .12s;
+    }
+    .btn:hover { background: var(--border); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-green { background: #1a4d2a; border-color: #2ea043; color: #56d364; }
+    .btn-green:hover { background: #1f6b38; }
+    .btn-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 4px; border: 1px solid transparent;
+      background: transparent; color: var(--muted); cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .btn-icon:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+    .btn-icon.danger:hover { background: rgba(248,81,73,.12); color: var(--red); border-color: rgba(248,81,73,.3); }
+
+    /* ── Layout ── */
+    main { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Setup banner ── */
+    .setup-banner {
+      background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.35);
+      border-radius: 10px; padding: 20px 24px;
+    }
+    .setup-banner h3 { color: var(--amber-hi); font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .setup-banner p  { color: var(--text); font-size: 13px; margin-bottom: 10px; }
+    .setup-steps { color: var(--muted); font-size: 13px; line-height: 2; padding-left: 0; list-style: none; }
+    .setup-steps li::before { content: counter(step) '. '; counter-increment: step; color: var(--amber-hi); font-weight: 600; }
+    .setup-steps { counter-reset: step; }
+    .setup-steps code {
+      background: var(--surface-2); border: 1px solid var(--border);
+      padding: 1px 6px; border-radius: 4px; font-family: var(--mono); font-size: 12px;
+      color: var(--green-hi);
+    }
+    .setup-link { color: var(--blue); text-decoration: none; }
+    .setup-link:hover { text-decoration: underline; }
+
+    /* ── Cards ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .card-header {
+      padding: 12px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .card-header h2 { font-size: 13px; font-weight: 600; }
+
+    /* ── Add form ── */
+    .add-form {
+      padding: 14px 18px; display: flex; align-items: flex-end;
+      gap: 10px; flex-wrap: wrap;
+    }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .field label .opt { font-weight: 400; color: var(--dim); text-transform: none; letter-spacing: 0; }
+    .field input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 13px; font-family: var(--font);
+      padding: 6px 10px; outline: none; width: 160px;
+      transition: border-color .12s;
+    }
+    .field input:focus { border-color: var(--blue); }
+    .field input::placeholder { color: var(--dim); }
+    #inp-symbol { width: 100px; font-family: var(--mono); font-weight: 700; letter-spacing: .03em; }
+    #inp-shares { width: 130px; }
+
+    /* ── Summary strip ── */
+    .summary-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 1px; background: var(--border); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .stat { background: var(--surface); padding: 12px 16px; }
+    .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .stat-value { font-size: 20px; font-weight: 600; font-family: var(--mono); color: var(--text); }
+    .stat-value.green  { color: var(--green-hi); }
+    .stat-value.amber  { color: var(--amber-hi); }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+    thead tr { background: var(--surface-2); }
+    th {
+      padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+      border-bottom: 1px solid var(--border);
+    }
+    th.r, td.r { text-align: right; }
+    th.hl { color: var(--green); }
+    td {
+      padding: 9px 12px; border-bottom: 1px solid rgba(48,54,61,.45);
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(33,38,45,.5); }
+
+    /* Ticker badge */
+    .badge {
+      display: inline-block; background: rgba(88,166,255,.1); border: 1px solid rgba(88,166,255,.25);
+      color: var(--blue); font-family: var(--mono); font-size: 11px; font-weight: 700;
+      padding: 2px 7px; border-radius: 4px; letter-spacing: .03em;
+    }
+
+    /* Company name */
+    .co-name { color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+    /* Ex-date */
+    .ex-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+    .ex-str  { font-family: var(--mono); font-size: 13px; }
+    .days-pill {
+      font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; line-height: 1.4;
+    }
+    .pill-urgent { background: rgba(248,81,73,.18); color: var(--red); }
+    .pill-soon   { background: rgba(227,179,65,.18); color: var(--amber-hi); }
+    .pill-future { background: rgba(63,185,80,.12);  color: var(--green); }
+    .pill-est    { background: rgba(139,148,158,.12); color: var(--muted); }
+    .pill-past   { background: rgba(139,148,158,.1);  color: var(--dim); }
+
+    /* Yield columns */
+    .yop { color: var(--text); font-family: var(--mono); }
+    .yoc { color: var(--green-hi); font-family: var(--mono); font-weight: 600; }
+
+    .freq-badge {
+      font-size: 11px; color: var(--muted); background: var(--surface-2);
+      border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px;
+    }
+
+    /* Loading / error */
+    .cell-loading { color: var(--muted); font-style: italic; }
+    .cell-error   { color: var(--red); font-size: 12px; }
+    .spinner {
+      display: inline-block; width: 11px; height: 11px;
+      border: 2px solid var(--border); border-top-color: var(--blue);
+      border-radius: 50%; animation: spin .65s linear infinite; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Actions */
+    .actions { display: flex; gap: 2px; justify-content: flex-end; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 56px 24px; color: var(--muted); }
+    .empty-state svg { width: 44px; height: 44px; color: var(--border); margin-bottom: 14px; }
+    .empty-state h3 { font-size: 15px; font-weight: 500; margin-bottom: 5px; }
+    .empty-state p  { font-size: 13px; color: var(--dim); }
+
+    .hidden { display: none !important; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; padding: 9px 14px;
+      border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+      transition: opacity .25s; opacity: 0; pointer-events: none; z-index: 999;
+    }
+    #toast.show { opacity: 1; }
+    #toast.error { border-color: rgba(248,81,73,.5); color: var(--red); }
+
+    .mono { font-family: var(--mono); }
+
+    @media (max-width: 600px) {
+      .add-form { flex-direction: column; align-items: stretch; }
+      .field input, #inp-symbol, #inp-shares { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+        <polyline points="16 7 22 7 22 13"/>
+      </svg>
+      <h1>Distribution Tracker</h1>
+    </div>
+    <div class="header-right">
+      <span id="last-updated"></span>
+      <button class="btn" id="btn-refresh" onclick="refreshAll()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refresh All
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Setup banner (shown when no API key is configured) -->
+  <div class="setup-banner hidden" id="setup-banner">
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      API Key Required
+    </h3>
+    <p>Distribution Tracker uses <strong>Polygon.io</strong> for live dividend &amp; price data. A free API key is required (no credit card).</p>
+    <ol class="setup-steps">
+      <li>Sign up for free at <a class="setup-link" href="https://polygon.io/" target="_blank">polygon.io</a></li>
+      <li>Copy your API key from the dashboard</li>
+      <li>In the app folder, create a file called <code>.env</code> containing:<br><code>POLYGON_KEY=your_api_key_here</code></li>
+      <li>Restart the server: <code>npm start</code></li>
+    </ol>
+  </div>
+
+  <!-- Add Ticker card -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Add Ticker</h2>
+    </div>
+    <div class="add-form">
+      <div class="field">
+        <label>Symbol</label>
+        <input id="inp-symbol" type="text" placeholder="JEPI" maxlength="12"
+               oninput="this.value=this.value.toUpperCase()"
+               onkeydown="if(event.key==='Enter') addTicker()">
+      </div>
+      <div class="field">
+        <label>Cost Basis / Share</label>
+        <input id="inp-cost" type="number" placeholder="55.00" min="0.01" step="0.01"
+               onkeydown="if(event.key==='Enter') addTicker()">
+      </div>
+      <div class="field">
+        <label>Shares <span class="opt">(optional)</span></label>
+        <input id="inp-shares" type="number" placeholder="100" min="0" step="0.001"
+               onkeydown="if(event.key==='Enter') addTicker()">
+      </div>
+      <button class="btn btn-green" onclick="addTicker()">+ Add</button>
+    </div>
+  </div>
+
+  <!-- Summary strip -->
+  <div class="summary-strip hidden" id="summary-strip">
+    <div class="stat">
+      <div class="stat-label">Tickers</div>
+      <div class="stat-value" id="s-count">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Ex-Dates ≤ 7 Days</div>
+      <div class="stat-value amber" id="s-urgent">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Payout Due ≤ 30 Days</div>
+      <div class="stat-value" id="s-payout">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Avg Yield on Cost</div>
+      <div class="stat-value green" id="s-yoc">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Avg Yield on Price</div>
+      <div class="stat-value" id="s-yop">—</div>
+    </div>
+  </div>
+
+  <!-- Main table -->
+  <div class="card hidden" id="table-card">
+    <div class="card-header">
+      <h2>Upcoming Distributions</h2>
+      <span style="font-size:11px;color:var(--muted)">Sorted by ex-date · soonest first</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th class="r">Price</th>
+            <th class="r">Cost / Sh</th>
+            <th class="r">Shares</th>
+            <th class="r">Ex-Date</th>
+            <th class="r">Pay Date</th>
+            <th class="r">Dist / Sh</th>
+            <th>Freq</th>
+            <th class="r">Ann. Rate</th>
+            <th class="r">Yield/Price</th>
+            <th class="r hl">Yield/Cost</th>
+            <th class="r">Est. Payout</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty-state" id="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <path d="M3 9h18M9 21V9"/><path d="M15 13v4M12 14v3"/>
+    </svg>
+    <h3>No tickers added yet</h3>
+    <p>Add a ticker symbol above to start tracking upcoming distributions.</p>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+const S = {
+  tickers: [],   // [{symbol, costBasis, shares}]
+  data:    {},   // {symbol: apiResponse | null}
+  loading: {},   // {symbol: bool}
+  errors:  {}    // {symbol: string | null}
+};
+
+// ── Persistence ────────────────────────────────────────────────────
+function persist() { localStorage.setItem('dt2_tickers', JSON.stringify(S.tickers)); }
+function hydrate() {
+  try { const r = localStorage.getItem('dt2_tickers'); if (r) S.tickers = JSON.parse(r); } catch {}
+}
+
+// ── Format helpers ─────────────────────────────────────────────────
+const fmt$ = (v, d=2) => v == null || isNaN(v) ? '—' : '$' + Number(v).toFixed(d);
+const fmtPct = v => v == null || isNaN(v) ? '—' : Number(v).toFixed(2) + '%';
+const fmtN = (v, d=3) => v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T12:00:00Z'); // noon UTC avoids timezone shifting the day
+  return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' });
+}
+
+function daysUntil(iso) {
+  if (!iso) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(iso + 'T12:00:00Z'); d.setHours(0,0,0,0);
+  return isNaN(d) ? null : Math.round((d - today) / 86400000);
+}
+
+const FREQ_LABEL = { 12:'Monthly', 4:'Quarterly', 2:'Semi-Ann', 1:'Annual' };
+const freqLabel = f => FREQ_LABEL[f] || `×${f}/yr`;
+
+// ── API ────────────────────────────────────────────────────────────
+async function fetchTicker(symbol) {
+  S.loading[symbol] = true; S.errors[symbol] = null;
+  render();
+  try {
+    const r = await fetch(`/api/ticker/${encodeURIComponent(symbol)}`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    S.data[symbol] = j;
+    S.errors[symbol] = null;
+  } catch (e) {
+    S.data[symbol] = null;
+    S.errors[symbol] = e.message;
+  }
+  S.loading[symbol] = false;
+  render();
+}
+
+// ── Actions ────────────────────────────────────────────────────────
+async function addTicker() {
+  const se = document.getElementById('inp-symbol');
+  const ce = document.getElementById('inp-cost');
+  const she = document.getElementById('inp-shares');
+
+  const symbol    = se.value.trim().toUpperCase();
+  const costBasis = parseFloat(ce.value);
+  const shares    = she.value ? parseFloat(she.value) : null;
+
+  if (!symbol) { se.focus(); return; }
+  if (!costBasis || costBasis <= 0) { toast('Enter a valid cost basis per share.', true); ce.focus(); return; }
+  if (S.tickers.find(t => t.symbol === symbol)) { toast(`${symbol} is already in your list.`, true); se.select(); return; }
+
+  S.tickers.push({ symbol, costBasis, shares });
+  persist();
+  se.value = ''; ce.value = ''; she.value = '';
+  se.focus();
+  render();
+  await fetchTicker(symbol);
+}
+
+function removeTicker(symbol) {
+  S.tickers = S.tickers.filter(t => t.symbol !== symbol);
+  delete S.data[symbol]; delete S.loading[symbol]; delete S.errors[symbol];
+  persist(); render();
+}
+
+function editCost(symbol) {
+  const t = S.tickers.find(t => t.symbol === symbol);
+  if (!t) return;
+  const v = prompt(`Cost basis per share for ${symbol}:`, t.costBasis);
+  if (v === null) return;
+  const n = parseFloat(v);
+  if (!n || n <= 0) { toast('Invalid value.', true); return; }
+  t.costBasis = n; persist(); render();
+}
+
+async function refreshAll() {
+  if (!S.tickers.length) return;
+  const btn = document.getElementById('btn-refresh');
+  btn.disabled = true;
+  await Promise.all(S.tickers.map(t => fetchTicker(t.symbol)));
+  btn.disabled = false;
+  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+// ── Render helpers ─────────────────────────────────────────────────
+function sortedTickers() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  return [...S.tickers].sort((a, b) => {
+    const da = S.data[a.symbol]; const db = S.data[b.symbol];
+    const exA = da?.exDividendDate ? new Date(da.exDividendDate + 'T12:00:00Z') : null;
+    const exB = db?.exDividendDate ? new Date(db.exDividendDate + 'T12:00:00Z') : null;
+    const upA = exA && exA >= now, upB = exB && exB >= now;
+    if (upA && !upB) return -1;
+    if (!upA && upB) return 1;
+    if (upA && upB) return exA - exB;
+    return 0;
+  });
+}
+
+const ICON_REFRESH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
+const ICON_X = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+function actionBtns(symbol) {
+  return `<div class="actions">
+    <button class="btn-icon" onclick="fetchTicker('${symbol}')" title="Refresh">${ICON_REFRESH}</button>
+    <button class="btn-icon danger" onclick="removeTicker('${symbol}')" title="Remove">${ICON_X}</button>
+  </div>`;
+}
+
+function renderRow({ symbol, costBasis, shares }) {
+  const data = S.data[symbol], loading = S.loading[symbol], err = S.errors[symbol];
+
+  if (loading) return `<tr>
+    <td><span class="badge">${symbol}</span></td>
+    <td colspan="12" class="cell-loading"><span class="spinner"></span>Loading…</td>
+    <td>${actionBtns(symbol)}</td></tr>`;
+
+  if (err) return `<tr>
+    <td><span class="badge">${symbol}</span></td>
+    <td colspan="12" class="cell-error">Error: ${esc(err)}</td>
+    <td>${actionBtns(symbol)}</td></tr>`;
+
+  if (!data) return `<tr>
+    <td><span class="badge">${symbol}</span></td>
+    <td colspan="12" style="color:var(--dim)">—</td>
+    <td>${actionBtns(symbol)}</td></tr>`;
+
+  const days = daysUntil(data.exDividendDate);
+  const upcoming = days !== null && days >= 0;
+  const isEst = data.isEstimated;
+
+  let exCell = '<span style="color:var(--dim)">—</span>';
+  if (data.exDividendDate) {
+    let pillClass = 'pill-past', pillText = 'past';
+    if (upcoming) {
+      if (days <= 7)       { pillClass = 'pill-urgent'; pillText = days === 0 ? 'today' : `in ${days}d`; }
+      else if (days <= 30) { pillClass = 'pill-soon';   pillText = `in ${days}d`; }
+      else                 { pillClass = 'pill-future';  pillText = `in ${days}d`; }
+    }
+    if (isEst) { pillClass = 'pill-est'; pillText = 'est.'; }
+    exCell = `<div class="ex-wrap">
+      <span class="ex-str">${fmtDate(data.exDividendDate)}</span>
+      <span class="days-pill ${pillClass}">${pillText}</span>
+    </div>`;
+  }
+
+  const annRate  = data.annualDividendRate || 0;
+  const price    = data.currentPrice;
+  const yop      = price && annRate ? annRate / price * 100 : null;
+  const yoc      = annRate && costBasis ? annRate / costBasis * 100 : null;
+  const distAmt  = data.distributionAmount || 0;
+  const estPay   = shares && distAmt ? shares * distAmt : null;
+
+  return `<tr>
+    <td><span class="badge">${symbol}</span></td>
+    <td><span class="co-name" title="${esc(data.name)}">${esc(data.name)}</span></td>
+    <td class="r mono">${fmt$(price)}</td>
+    <td class="r mono" style="color:var(--muted);cursor:pointer" onclick="editCost('${symbol}')" title="Click to edit">${fmt$(costBasis)}</td>
+    <td class="r mono">${shares != null ? fmtN(shares) : '<span style="color:var(--dim)">—</span>'}</td>
+    <td class="r">${exCell}</td>
+    <td class="r mono" style="color:var(--muted)">${fmtDate(data.dividendDate)}</td>
+    <td class="r mono">${distAmt > 0 ? fmt$(distAmt, 4) : '<span style="color:var(--dim)">—</span>'}</td>
+    <td><span class="freq-badge">${freqLabel(data.frequency)}</span></td>
+    <td class="r mono" style="color:var(--muted)">${annRate > 0 ? fmt$(annRate, 4) : '<span style="color:var(--dim)">—</span>'}</td>
+    <td class="r yop">${fmtPct(yop)}</td>
+    <td class="r yoc">${fmtPct(yoc)}</td>
+    <td class="r mono">${estPay != null ? fmt$(estPay) : '<span style="color:var(--dim)">—</span>'}</td>
+    <td>${actionBtns(symbol)}</td>
+  </tr>`;
+}
+
+function renderSummary() {
+  const count = S.tickers.length;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const in7  = new Date(now); in7.setDate(in7.getDate() + 7);
+  const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
+  let urgent = 0, payout30 = 0, yocSum = 0, yocN = 0, yopSum = 0, yopN = 0;
+
+  for (const { symbol, costBasis, shares } of S.tickers) {
+    const d = S.data[symbol]; if (!d) continue;
+    const ex = d.exDividendDate ? new Date(d.exDividendDate + 'T12:00:00Z') : null;
+    if (ex && ex >= now && ex <= in7)  urgent++;
+    if (ex && ex >= now && ex <= in30 && shares && d.distributionAmount > 0) payout30 += shares * d.distributionAmount;
+    const r = d.annualDividendRate || 0;
+    if (r > 0 && costBasis)     { yocSum += r / costBasis * 100; yocN++; }
+    if (r > 0 && d.currentPrice){ yopSum += r / d.currentPrice * 100; yopN++; }
+  }
+
+  document.getElementById('s-count').textContent  = count;
+  document.getElementById('s-urgent').textContent  = urgent;
+  document.getElementById('s-payout').textContent  = payout30 > 0 ? fmt$(payout30) : '—';
+  document.getElementById('s-yoc').textContent     = yocN ? fmtPct(yocSum / yocN) : '—';
+  document.getElementById('s-yop').textContent     = yopN ? fmtPct(yopSum / yopN) : '—';
+}
+
+function render() {
+  const has = S.tickers.length > 0;
+  document.getElementById('empty-state').classList.toggle('hidden', has);
+  document.getElementById('table-card').classList.toggle('hidden', !has);
+  document.getElementById('summary-strip').classList.toggle('hidden', !has);
+  if (!has) return;
+  document.getElementById('tbody').innerHTML = sortedTickers().map(renderRow).join('');
+  renderSummary();
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+let _tt;
+function toast(msg, isError=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = isError ? 'error show' : 'show';
+  clearTimeout(_tt);
+  _tt = setTimeout(() => { el.className = isError ? 'error' : ''; }, 3000);
+}
+
+// ── Escape HTML ────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── Init ───────────────────────────────────────────────────────────
+async function init() {
+  hydrate();
+  render();
+
+  // Check API key status
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    document.getElementById('setup-banner').classList.toggle('hidden', cfg.hasKey);
+  } catch { /* server might not be ready */ }
+
+  if (S.tickers.length > 0) {
+    await Promise.all(S.tickers.map(t => fetchTicker(t.symbol)));
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  }
+}
+
+init();
+</script>
+</body>
+</html>
