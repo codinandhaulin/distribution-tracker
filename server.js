@@ -34,6 +34,20 @@ async function polyGet(endpoint) {
   return res.json();
 }
 
+// Retry polyGet once on 429, waiting 65 seconds for the rate-limit window to reset.
+async function polyGetRetry(endpoint) {
+  try {
+    return await polyGet(endpoint);
+  } catch (err) {
+    if (err.message.includes('429')) {
+      console.log(`  Rate-limited by Polygon — waiting 65 s before retry…`);
+      await new Promise(r => setTimeout(r, 65000));
+      return await polyGet(endpoint); // throws if still 429
+    }
+    throw err;
+  }
+}
+
 function estimateNextExDate(lastDate, frequency) {
   const days = { 52: 7, 12: 30, 4: 91, 2: 182, 1: 365 }[frequency] || Math.round(365 / frequency);
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -42,7 +56,14 @@ function estimateNextExDate(lastDate, frequency) {
   return next.toISOString().split('T')[0];
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ── Server-side cache (survives within a process session) ───────────
+const sCache = new Map(); // symbol -> { data, ts }
+const SCACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
+
+function scGet(sym)       { const e = sCache.get(sym); return e && Date.now()-e.ts < SCACHE_TTL ? e.data : null; }
+function scSet(sym, data) { sCache.set(sym, { data, ts: Date.now() }); }
+
+// ─────────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -53,11 +74,18 @@ app.get('/api/config', (_, res) => {
 
 app.get('/api/ticker/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase().trim();
+  const forceRefresh = req.query.force === '1';
+
+  if (!forceRefresh) {
+    const cached = scGet(symbol);
+    if (cached) return res.json(cached);
+  }
+
   try {
     const [prevClose, divResp, tickerRef] = await Promise.all([
-      polyGet(`/v2/aggs/ticker/${symbol}/prev`),
-      polyGet(`/v3/reference/dividends?ticker=${symbol}&limit=24&order=desc`).catch(() => null),
-      polyGet(`/v3/reference/tickers/${symbol}`).catch(() => null)
+      polyGetRetry(`/v2/aggs/ticker/${symbol}/prev`),
+      polyGetRetry(`/v3/reference/dividends?ticker=${symbol}&limit=24&order=desc`).catch(() => null),
+      polyGetRetry(`/v3/reference/tickers/${symbol}`).catch(() => null)
     ]);
 
     const price = prevClose?.results?.[0]?.c;
@@ -73,12 +101,12 @@ app.get('/api/ticker/:symbol', async (req, res) => {
 
     const futureDivs   = allDivs.filter(d => d.ex_dividend_date > today);
     const pastDivs     = allDivs.filter(d => d.ex_dividend_date <= today);
-    // futureDivs are newest-first so the last element is the soonest upcoming
     const nextDeclared = futureDivs.length > 0 ? futureDivs[futureDivs.length - 1] : null;
 
     // Polygon provides frequency directly: 1=annual, 2=semi, 4=quarterly, 12=monthly
-    const frequency      = allDivs[0]?.frequency || 4;
-    const recentDiv      = nextDeclared || pastDivs[0] || null;
+    // Only set frequency when we actually have dividend records — don't default to 4 (Quarterly) when there's no data
+    const frequency       = allDivs[0]?.frequency ?? null;
+    const recentDiv       = nextDeclared || pastDivs[0] || null;
     const distributionAmt = recentDiv?.cash_amount ?? 0;
 
     let exDividendDate = nextDeclared?.ex_dividend_date ?? null;
@@ -89,7 +117,6 @@ app.get('/api/ticker/:symbol', async (req, res) => {
       exDividendDate = estimateNextExDate(pastDivs[0].ex_dividend_date, frequency);
       isEstimated    = true;
 
-      // Estimate pay date using the same ex→pay offset as the most recent historical dividend
       const lastEx  = pastDivs[0].ex_dividend_date;
       const lastPay = pastDivs[0].pay_date;
       if (lastEx && lastPay) {
@@ -102,9 +129,9 @@ app.get('/api/ticker/:symbol', async (req, res) => {
       }
     }
 
-    const annualDividendRate = distributionAmt ? distributionAmt * frequency : 0;
+    const annualDividendRate = (distributionAmt && frequency) ? distributionAmt * frequency : 0;
 
-    res.json({
+    const responseData = {
       symbol,
       name,
       currentPrice: price,
@@ -116,7 +143,10 @@ app.get('/api/ticker/:symbol', async (req, res) => {
       isEstimated,
       currency: 'USD',
       history: allDivs.map(d => ({ date: d.ex_dividend_date, amount: d.cash_amount, payDate: d.pay_date || null }))
-    });
+    };
+
+    scSet(symbol, responseData);
+    res.json(responseData);
 
   } catch (err) {
     if (err.noKey) {

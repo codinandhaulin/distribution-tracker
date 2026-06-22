@@ -304,9 +304,10 @@
       font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       letter-spacing: .02em;
     }
-    .chip-ex  { background: rgba(248,81,73,.18);  color: var(--red); }
-    .chip-est { background: rgba(163,113,247,.18); color: var(--purple); }
-    .chip-pay { background: rgba(63,185,80,.18);   color: var(--green-hi); }
+    .chip-ex      { background: rgba(248,81,73,.18);  color: var(--red); }
+    .chip-est     { background: rgba(163,113,247,.18); color: var(--purple); }
+    .chip-pay     { background: rgba(63,185,80,.18);   color: var(--green-hi); }
+    .chip-pay-est { background: rgba(139,148,158,.12); color: var(--muted); font-style: italic; }
 
     .cal-legend {
       padding: 10px 18px; border-top: 1px solid var(--border);
@@ -373,6 +374,15 @@
   <div class="card">
     <div class="card-header">
       <h2>Add Ticker</h2>
+      <div>
+        <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="handleCSVFile(this)">
+        <button class="btn" onclick="document.getElementById('csv-input').click()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Import CSV
+        </button>
+      </div>
     </div>
     <div class="add-form">
       <div class="field">
@@ -416,6 +426,10 @@
     <div class="stat">
       <div class="stat-label">Avg Yield on Price</div>
       <div class="stat-value" id="s-yop">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Est. Annual Total</div>
+      <div class="stat-value green" id="s-annual">—</div>
     </div>
   </div>
 
@@ -473,7 +487,8 @@
     <div class="cal-legend">
       <div class="cal-legend-item"><span class="cal-chip chip-ex">EX</span> Ex-date (declared)</div>
       <div class="cal-legend-item"><span class="cal-chip chip-est">EX</span> Ex-date (estimated)</div>
-      <div class="cal-legend-item"><span class="cal-chip chip-pay">PAY</span> Pay date</div>
+      <div class="cal-legend-item"><span class="cal-chip chip-pay">PAY</span> Pay date (confirmed)</div>
+      <div class="cal-legend-item"><span class="cal-chip chip-pay-est">PAY</span> Pay date (estimated)</div>
     </div>
   </div>
 
@@ -542,7 +557,8 @@ function hydrate() {
 }
 
 // ── Format helpers ─────────────────────────────────────────────────
-const fmt$ = (v, d=2) => v == null || isNaN(v) ? '—' : '$' + Number(v).toFixed(d);
+const fmt$ = (v, d=2) => v == null || isNaN(v) ? '—' :
+  '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtPct = v => v == null || isNaN(v) ? '—' : Number(v).toFixed(2) + '%';
 const fmtN = (v, d=3) => v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
 
@@ -563,21 +579,49 @@ const FREQ_LABEL = { 52:'Weekly', 12:'Monthly', 4:'Quarterly', 2:'Semi-Ann', 1:'
 const freqLabel = f => FREQ_LABEL[f] || `×${f}/yr`;
 
 // ── API ────────────────────────────────────────────────────────────
-async function fetchTicker(symbol) {
+// ── Ticker data cache (localStorage, 12h TTL) ──────────────────────
+const TCACHE_KEY = 'dt2_cache';
+const TCACHE_TTL = 12 * 60 * 60 * 1000;
+function tcacheGet(sym) {
+  try {
+    const e = JSON.parse(localStorage.getItem(TCACHE_KEY) || '{}')[sym];
+    return e && Date.now() - e.ts < TCACHE_TTL ? e.d : null;
+  } catch { return null; }
+}
+function tcacheSet(sym, data) {
+  try {
+    const store = JSON.parse(localStorage.getItem(TCACHE_KEY) || '{}');
+    store[sym] = { d: data, ts: Date.now() };
+    localStorage.setItem(TCACHE_KEY, JSON.stringify(store));
+  } catch {}
+}
+
+async function fetchTicker(symbol, force = false) {
+  if (!force) {
+    const hit = tcacheGet(symbol);
+    if (hit) {
+      S.data[symbol] = hit; S.loading[symbol] = false; S.errors[symbol] = null;
+      render();
+      return false; // cache hit — no API call
+    }
+  }
   S.loading[symbol] = true; S.errors[symbol] = null;
   render();
   try {
-    const r = await fetch(`/api/ticker/${encodeURIComponent(symbol)}`);
+    const url = `/api/ticker/${encodeURIComponent(symbol)}${force ? '?force=1' : ''}`;
+    const r = await fetch(url);
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
     S.data[symbol] = j;
     S.errors[symbol] = null;
+    tcacheSet(symbol, j);
   } catch (e) {
     S.data[symbol] = null;
     S.errors[symbol] = e.message;
   }
   S.loading[symbol] = false;
   render();
+  return true; // API call was made
 }
 
 // ── Actions ────────────────────────────────────────────────────────
@@ -612,7 +656,7 @@ async function refreshAll() {
   if (!S.tickers.length) return;
   const btn = document.getElementById('btn-refresh');
   btn.disabled = true;
-  await Promise.all(S.tickers.map(t => fetchTicker(t.symbol)));
+  await batchFetch(S.tickers); // skips tickers whose cache is still fresh
   btn.disabled = false;
   document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
@@ -703,9 +747,9 @@ function renderCalendar() {
 
   // Build event map: 'YYYY-MM-DD' -> [{symbol, type}]
   const events = {};
-  const addEv = (date, symbol, type, amount) => {
+  const addEv = (date, symbol, type, amount, est = false) => {
     if (!date) return;
-    (events[date] ??= []).push({ symbol, type, amount });
+    (events[date] ??= []).push({ symbol, type, amount, est });
   };
   const calNow   = new Date();
   const todayStr = `${calNow.getFullYear()}-${String(calNow.getMonth()+1).padStart(2,'0')}-${String(calNow.getDate()).padStart(2,'0')}`;
@@ -741,7 +785,7 @@ function renderCalendar() {
         const payDate = new Date(new Date(exDate + 'T12:00:00Z').getTime() + payOffsetDays * 86400000)
           .toISOString().split('T')[0];
         const payAmt = (d.distributionAmount && shares) ? shares * d.distributionAmount : null;
-        addEv(payDate, symbol, 'pay', payAmt);
+        addEv(payDate, symbol, 'pay', payAmt, true);
       }
     }
   }
@@ -765,7 +809,11 @@ function renderCalendar() {
   function makeChips(dateStr) {
     return (events[dateStr] || []).map(e => {
       const label = e.type === 'pay' && e.amount ? `${e.symbol} ${fmt$(e.amount)}` : e.symbol;
-      return `<span class="cal-chip chip-${e.type}" title="${e.type === 'pay' ? 'Pay' : 'Ex'}-date · ${e.symbol}">${label}</span>`;
+      const chipClass = e.type === 'pay' ? (e.est ? 'chip-pay-est' : 'chip-pay') : `chip-${e.type}`;
+      const title = e.type === 'pay'
+        ? `${e.est ? 'Estimated pay' : 'Pay'}-date · ${e.symbol}`
+        : `Ex-date · ${e.symbol}`;
+      return `<span class="cal-chip ${chipClass}" title="${title}">${label}</span>`;
     }).join('');
   }
 
@@ -891,7 +939,7 @@ function renderRow({ symbol, costBasis, shares }) {
     <td class="r">${exCell}</td>
     <td class="r mono" style="color:var(--muted)">${fmtDate(data.dividendDate)}</td>
     <td class="r mono">${distAmt > 0 ? fmt$(distAmt, 4) : '<span style="color:var(--dim)">—</span>'}</td>
-    <td><span class="freq-badge">${freqLabel(data.frequency)}</span></td>
+    <td>${data.frequency ? `<span class="freq-badge">${freqLabel(data.frequency)}</span>` : '—'}</td>
     <td class="r mono" style="color:var(--muted)">${annRate > 0 ? fmt$(annRate, 4) : '<span style="color:var(--dim)">—</span>'}</td>
     <td class="r yop">${fmtPct(yop)}</td>
     <td class="r yoc">${fmtPct(yoc)}</td>
@@ -917,11 +965,20 @@ function renderSummary() {
     if (r > 0 && d.currentPrice){ yopSum += r / d.currentPrice * 100; yopN++; }
   }
 
+  let annualTotal = 0, hasAnnual = false;
+  for (const { symbol, shares } of S.tickers) {
+    const d = S.data[symbol];
+    if (!d || !shares) continue;
+    annualTotal += (d.annualDividendRate || 0) * shares;
+    hasAnnual = true;
+  }
+
   document.getElementById('s-count').textContent  = count;
   document.getElementById('s-urgent').textContent  = urgent;
   document.getElementById('s-payout').textContent  = payout30 > 0 ? fmt$(payout30) : '—';
   document.getElementById('s-yoc').textContent     = yocN ? fmtPct(yocSum / yocN) : '—';
   document.getElementById('s-yop').textContent     = yopN ? fmtPct(yopSum / yopN) : '—';
+  document.getElementById('s-annual').textContent  = hasAnnual ? fmt$(annualTotal) : '—';
 }
 
 // ── Render ─────────────────────────────────────────────────────────
@@ -950,6 +1007,125 @@ function toast(msg, isError=false) {
 // ── Escape HTML ────────────────────────────────────────────────────
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── Batch fetch (rate-limited for Polygon free tier) ───────────────
+// Fetch tickers one at a time; only rate-limit actual API calls (not cache hits).
+// Polygon free tier: 5 req/min. Each ticker → 3 Polygon calls, so space them ~15s apart.
+async function batchFetch(tickers, force = false) {
+  const API_DELAY = 30000; // ms between real Polygon fetches (Polygon free = 5 req/min; 3 calls/ticker → need ≥30s gap)
+  let lastApiAt = 0;
+  let apiCount = 0, total = tickers.filter(t => force || !tcacheGet(t.symbol)).length;
+  const updateProgress = (n) => {
+    if (total > 0) {
+      const el = document.getElementById('last-updated');
+      if (el) el.textContent = `Fetching ${n}/${total} from Polygon…`;
+    }
+  };
+  for (const t of tickers) {
+    const needsApi = force || !tcacheGet(t.symbol);
+    if (needsApi) {
+      const elapsed = Date.now() - lastApiAt;
+      if (lastApiAt > 0 && elapsed < API_DELAY)
+        await new Promise(r => setTimeout(r, API_DELAY - elapsed));
+      updateProgress(++apiCount);
+      lastApiAt = Date.now();
+    }
+    await fetchTicker(t.symbol, force);
+  }
+}
+
+// ── CSV Import ─────────────────────────────────────────────────────
+function parseCSVRow(line) {
+  const out = []; let field = '', inQ = false;
+  for (const ch of line) {
+    if (ch === '"') inQ = !inQ;
+    else if (ch === ',' && !inQ) { out.push(field.trim()); field = ''; }
+    else field += ch;
+  }
+  out.push(field.trim());
+  return out.map(f => f.replace(/^"|"$/g, '').trim());
+}
+
+function parseNum(s) {
+  if (s == null) return null;
+  const n = parseFloat(String(s).replace(/[$,\s%+]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+async function handleCSVFile(input) {
+  const file = input.files[0]; if (!file) return;
+  input.value = '';
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+
+  // Find the header row
+  let headerIdx = -1, rawHeaders = [];
+  for (let i = 0; i < Math.min(lines.length, 25); i++) {
+    const cols = parseCSVRow(lines[i]);
+    if (cols.some(c => /^(symbol|ticker)$/i.test(c))) {
+      headerIdx = i; rawHeaders = cols; break;
+    }
+  }
+  if (headerIdx < 0) { toast('No "Symbol" column found — check CSV format.', true); return; }
+
+  const h = rawHeaders.map(c => c.toLowerCase());
+  const symIdx    = h.findIndex(c => /^(symbol|ticker)$/.test(c));
+  const sharesIdx = h.findIndex(c => /^(quantity|shares|units|qty)$/.test(c));
+
+  // Per-share cost: "Average Cost Basis" (Fidelity), "*/share", "* per share", "avg cost" not followed by "total"
+  const costPSIdx = h.findIndex(c =>
+    /^average cost basis$|\/share|per share|avg(erage)?\s+cost(?!\s+(basis\s+)?total)/i.test(c)
+  );
+  // Total cost fallback: "Cost Basis Total" (Fidelity), "total cost basis", "cost basis" alone
+  const costTotIdx = costPSIdx < 0
+    ? h.findIndex(c => /cost basis total|total cost basis|total cost|^cost basis$/i.test(c))
+    : -1;
+
+  // Collect raw positions (may include duplicates for multi-lot holdings)
+  const positions = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cols = parseCSVRow(lines[i]);
+    const raw    = cols[symIdx] || '';
+    const symbol = raw.toUpperCase().replace(/[^A-Z0-9.\-/]/g, '');
+    if (!symbol || symbol.length > 12 || /^(--|cash|pending|total|account)/i.test(raw)) continue;
+
+    const shares = sharesIdx >= 0 ? parseNum(cols[sharesIdx]) : null;
+    let costBasis = costPSIdx >= 0 ? parseNum(cols[costPSIdx]) : null;
+    if (costBasis == null && costTotIdx >= 0) {
+      const tot = parseNum(cols[costTotIdx]);
+      if (tot != null && shares > 0) costBasis = tot / shares;
+    }
+    if (!costBasis || costBasis <= 0) continue;
+    positions.push({ symbol, costBasis, shares: shares > 0 ? shares : null });
+  }
+
+  // Merge duplicate symbols: sum shares, weighted-average cost basis
+  const bySymbol = new Map();
+  for (const p of positions) {
+    if (bySymbol.has(p.symbol)) {
+      const ex = bySymbol.get(p.symbol);
+      const tot = (ex.shares || 0) + (p.shares || 0);
+      ex.costBasis = tot > 0
+        ? ((ex.costBasis * (ex.shares || 0)) + (p.costBasis * (p.shares || 0))) / tot
+        : ex.costBasis;
+      ex.shares = tot || null;
+    } else {
+      bySymbol.set(p.symbol, { ...p });
+    }
+  }
+  const imported = [...bySymbol.values()];
+
+  if (!imported.length) { toast('No valid positions found — check CSV format.', true); return; }
+
+  S.tickers = imported;
+  S.data = {}; S.loading = {}; S.errors = {};
+  persist();
+  render();
+  toast(`Imported ${imported.length} ticker${imported.length !== 1 ? 's' : ''} — fetching data in batches…`);
+
+  await batchFetch(S.tickers);
+  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
 
 // ── Init ───────────────────────────────────────────────────────────
 async function init() {
