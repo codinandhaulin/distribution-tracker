@@ -112,6 +112,12 @@
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
     }
     .card-header h2 { font-size: 13px; font-weight: 600; }
+    .card-header-toggle { cursor: pointer; user-select: none; }
+    .card-header-toggle:hover h2 { color: var(--fg); }
+    .chevron { transition: transform .18s; display: flex; }
+    .chevron.open { transform: rotate(180deg); }
+    .add-card-body { border-bottom: none; }
+    .add-card-body.collapsed { display: none; }
 
     /* ── Add form ── */
     .add-form {
@@ -374,38 +380,45 @@
     </ol>
   </div>
 
-  <!-- Add Ticker card -->
+  <!-- Add Ticker card (collapsible) -->
   <div class="card">
-    <div class="card-header">
-      <h2>Add Ticker</h2>
-      <div>
-        <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="handleCSVFile(this)">
-        <button class="btn" onclick="document.getElementById('csv-input').click()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-          Import CSV
-        </button>
-      </div>
+    <div class="card-header card-header-toggle" onclick="toggleAddCard()">
+      <h2>Add / Import</h2>
+      <span class="chevron" id="add-chevron">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </span>
     </div>
-    <div class="add-form">
-      <div class="field">
-        <label>Symbol</label>
-        <input id="inp-symbol" type="text" placeholder="JEPI" maxlength="12"
-               oninput="this.value=this.value.toUpperCase()"
-               onkeydown="if(event.key==='Enter') addTicker()">
+    <div class="add-card-body" id="add-card-body">
+      <div class="add-form">
+        <div class="field">
+          <label>Symbol</label>
+          <input id="inp-symbol" type="text" placeholder="JEPI" maxlength="12"
+                 oninput="this.value=this.value.toUpperCase()"
+                 onkeydown="if(event.key==='Enter') addTicker()">
+        </div>
+        <div class="field">
+          <label>Cost Basis / Share</label>
+          <input id="inp-cost" type="number" placeholder="55.00" min="0.01" step="0.01"
+                 onkeydown="if(event.key==='Enter') addTicker()">
+        </div>
+        <div class="field">
+          <label>Shares <span class="opt">(optional)</span></label>
+          <input id="inp-shares" type="number" placeholder="100" min="0" step="0.001"
+                 onkeydown="if(event.key==='Enter') addTicker()">
+        </div>
+        <button class="btn btn-green" onclick="addTicker()">+ Add</button>
+        <div style="display:flex;align-items:flex-end">
+          <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="handleCSVFile(this)">
+          <button class="btn" onclick="document.getElementById('csv-input').click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Import CSV
+          </button>
+        </div>
       </div>
-      <div class="field">
-        <label>Cost Basis / Share</label>
-        <input id="inp-cost" type="number" placeholder="55.00" min="0.01" step="0.01"
-               onkeydown="if(event.key==='Enter') addTicker()">
-      </div>
-      <div class="field">
-        <label>Shares <span class="opt">(optional)</span></label>
-        <input id="inp-shares" type="number" placeholder="100" min="0" step="0.001"
-               onkeydown="if(event.key==='Enter') addTicker()">
-      </div>
-      <button class="btn btn-green" onclick="addTicker()">+ Add</button>
     </div>
   </div>
 
@@ -682,6 +695,14 @@ function saveEdit() {
 }
 
 // ── View toggle ────────────────────────────────────────────────────
+function toggleAddCard(forceOpen) {
+  const body    = document.getElementById('add-card-body');
+  const chevron = document.getElementById('add-chevron');
+  const open    = forceOpen !== undefined ? forceOpen : body.classList.contains('collapsed');
+  body.classList.toggle('collapsed', !open);
+  chevron.classList.toggle('open', open);
+}
+
 function toggleView(v) {
   calView = (v === 'cal');
   document.getElementById('btn-view-table').classList.toggle('active', !calView);
@@ -1191,6 +1212,7 @@ async function handleCSVFile(input) {
 // ── Init ───────────────────────────────────────────────────────────
 async function init() {
   hydrate();
+  toggleAddCard(S.tickers.length === 0); // open when empty, collapsed when portfolio exists
   render();
 
   document.addEventListener('keydown', e => {
