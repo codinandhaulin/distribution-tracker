@@ -19,6 +19,7 @@
       --amber-hi:  #e3b341;
       --red:       #f85149;
       --blue:      #58a6ff;
+      --purple:    #a371f7;
       --font:  -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       --mono:  'SF Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
     }
@@ -49,6 +50,18 @@
     .brand h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
     .header-right { display: flex; align-items: center; gap: 12px; }
     #last-updated { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+    /* ── View toggle ── */
+    .view-toggle {
+      display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    }
+    .view-toggle button {
+      padding: 5px 12px; font-size: 12px; font-family: var(--font);
+      background: transparent; border: none; color: var(--muted); cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .view-toggle button.active { background: var(--surface-2); color: var(--text); }
+    .view-toggle button:hover:not(.active) { background: rgba(255,255,255,.04); color: var(--text); }
 
     /* ── Buttons ── */
     .btn {
@@ -168,7 +181,7 @@
     .pill-urgent { background: rgba(248,81,73,.18); color: var(--red); }
     .pill-soon   { background: rgba(227,179,65,.18); color: var(--amber-hi); }
     .pill-future { background: rgba(63,185,80,.12);  color: var(--green); }
-    .pill-est    { background: rgba(139,148,158,.12); color: var(--muted); }
+    .pill-est    { background: rgba(163,113,247,.15); color: var(--purple); }
     .pill-past   { background: rgba(139,148,158,.1);  color: var(--dim); }
 
     /* Yield columns */
@@ -214,9 +227,83 @@
 
     .mono { font-family: var(--mono); }
 
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 500; backdrop-filter: blur(2px);
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      width: 340px; max-width: calc(100vw - 32px);
+      box-shadow: 0 16px 48px rgba(0,0,0,.5);
+    }
+    .modal-header {
+      padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .modal-header h3 {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+    .modal-body .field input { width: 100%; }
+    .modal-footer {
+      padding: 12px 18px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+
+    /* ── Calendar ── */
+    .cal-nav { display: flex; align-items: center; gap: 8px; }
+    .cal-nav h2 { font-size: 14px; font-weight: 600; min-width: 130px; text-align: center; }
+    .cal-today-btn {
+      font-size: 11px; color: var(--muted); background: var(--surface-2);
+      border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px;
+      cursor: pointer; font-family: var(--font); margin-left: 4px;
+    }
+    .cal-today-btn:hover { color: var(--text); border-color: var(--blue); }
+
+    .cal-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr);
+      border-top: 1px solid var(--border);
+    }
+    .cal-dow {
+      padding: 6px 4px; font-size: 10px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .05em; text-align: center;
+      background: var(--surface-2); border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+    .cal-dow:last-child { border-right: none; }
+    .cal-cell {
+      min-height: 76px; padding: 5px 6px;
+      border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+    }
+    .cal-cell:nth-child(7n) { border-right: none; }
+    .cal-cell.other-month { background: rgba(0,0,0,.15); }
+    .cal-cell.today { background: rgba(88,166,255,.05); }
+    .cal-day-num { font-size: 11px; color: var(--muted); margin-bottom: 3px; font-family: var(--mono); }
+    .cal-cell.today .cal-day-num { color: var(--blue); font-weight: 700; }
+    .cal-events { display: flex; flex-direction: column; gap: 2px; }
+    .cal-chip {
+      font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+      font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      letter-spacing: .02em;
+    }
+    .chip-ex  { background: rgba(248,81,73,.18);  color: var(--red); }
+    .chip-est { background: rgba(163,113,247,.18); color: var(--purple); }
+    .chip-pay { background: rgba(63,185,80,.18);   color: var(--green-hi); }
+
+    .cal-legend {
+      padding: 10px 18px; border-top: 1px solid var(--border);
+      display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+    }
+    .cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+
     @media (max-width: 600px) {
       .add-form { flex-direction: column; align-items: stretch; }
       .field input, #inp-symbol, #inp-shares { width: 100%; }
+      .cal-chip { font-size: 9px; padding: 1px 3px; }
+      .cal-cell { min-height: 56px; padding: 3px 4px; }
     }
   </style>
 </head>
@@ -233,6 +320,10 @@
     </div>
     <div class="header-right">
       <span id="last-updated"></span>
+      <div class="view-toggle">
+        <button id="btn-view-table" class="active" onclick="toggleView('table')">Table</button>
+        <button id="btn-view-cal" onclick="toggleView('cal')">Calendar</button>
+      </div>
       <button class="btn" id="btn-refresh" onclick="refreshAll()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -246,7 +337,7 @@
 
 <main>
 
-  <!-- Setup banner (shown when no API key is configured) -->
+  <!-- Setup banner -->
   <div class="setup-banner hidden" id="setup-banner">
     <h3>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -313,7 +404,7 @@
     </div>
   </div>
 
-  <!-- Main table -->
+  <!-- Table view -->
   <div class="card hidden" id="table-card">
     <div class="card-header">
       <h2>Upcoming Distributions</h2>
@@ -344,6 +435,32 @@
     </div>
   </div>
 
+  <!-- Calendar view -->
+  <div class="card hidden" id="calendar-card">
+    <div class="card-header">
+      <div class="cal-nav">
+        <button class="btn-icon" onclick="calPrev()" title="Previous month">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <h2 id="cal-month-label"></h2>
+        <button class="btn-icon" onclick="calNext()" title="Next month">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+        <button class="cal-today-btn" onclick="calGoToday()">Today</button>
+      </div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><span class="cal-chip chip-ex">EX</span> Ex-date (declared)</div>
+      <div class="cal-legend-item"><span class="cal-chip chip-est">EX</span> Ex-date (estimated)</div>
+      <div class="cal-legend-item"><span class="cal-chip chip-pay">PAY</span> Pay date</div>
+    </div>
+  </div>
+
   <!-- Empty state -->
   <div class="empty-state" id="empty-state">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
@@ -358,6 +475,36 @@
 
 <div id="toast"></div>
 
+<!-- Edit modal -->
+<div class="modal-overlay hidden" id="edit-modal" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Edit</h3>
+      <button class="btn-icon" onclick="closeEditModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Cost Basis / Share</label>
+        <input id="modal-cost" type="number" placeholder="55.00" min="0.01" step="0.01"
+               onkeydown="if(event.key==='Enter')saveEdit();if(event.key==='Escape')closeEditModal()">
+      </div>
+      <div class="field">
+        <label>Shares <span class="opt">(optional)</span></label>
+        <input id="modal-shares" type="number" placeholder="100" min="0" step="0.001"
+               onkeydown="if(event.key==='Enter')saveEdit();if(event.key==='Escape')closeEditModal()">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-green" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────
 const S = {
@@ -366,6 +513,11 @@ const S = {
   loading: {},   // {symbol: bool}
   errors:  {}    // {symbol: string | null}
 };
+
+let calView    = false;
+let calYear    = new Date().getFullYear();
+let calMonth   = new Date().getMonth(); // 0-indexed
+let _editSym   = null;
 
 // ── Persistence ────────────────────────────────────────────────────
 function persist() { localStorage.setItem('dt2_tickers', JSON.stringify(S.tickers)); }
@@ -380,7 +532,7 @@ const fmtN = (v, d=3) => v == null ? '—' : Number(v).toLocaleString(undefined,
 
 function fmtDate(iso) {
   if (!iso) return '—';
-  const d = new Date(iso + 'T12:00:00Z'); // noon UTC avoids timezone shifting the day
+  const d = new Date(iso + 'T12:00:00Z');
   return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' });
 }
 
@@ -391,7 +543,7 @@ function daysUntil(iso) {
   return isNaN(d) ? null : Math.round((d - today) / 86400000);
 }
 
-const FREQ_LABEL = { 12:'Monthly', 4:'Quarterly', 2:'Semi-Ann', 1:'Annual' };
+const FREQ_LABEL = { 52:'Weekly', 12:'Monthly', 4:'Quarterly', 2:'Semi-Ann', 1:'Annual' };
 const freqLabel = f => FREQ_LABEL[f] || `×${f}/yr`;
 
 // ── API ────────────────────────────────────────────────────────────
@@ -440,16 +592,6 @@ function removeTicker(symbol) {
   persist(); render();
 }
 
-function editCost(symbol) {
-  const t = S.tickers.find(t => t.symbol === symbol);
-  if (!t) return;
-  const v = prompt(`Cost basis per share for ${symbol}:`, t.costBasis);
-  if (v === null) return;
-  const n = parseFloat(v);
-  if (!n || n <= 0) { toast('Invalid value.', true); return; }
-  t.costBasis = n; persist(); render();
-}
-
 async function refreshAll() {
   if (!S.tickers.length) return;
   const btn = document.getElementById('btn-refresh');
@@ -459,7 +601,153 @@ async function refreshAll() {
   document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
-// ── Render helpers ─────────────────────────────────────────────────
+// ── Edit modal ─────────────────────────────────────────────────────
+function openEditModal(symbol) {
+  const t = S.tickers.find(t => t.symbol === symbol);
+  if (!t) return;
+  _editSym = symbol;
+  const d = S.data[symbol];
+  document.getElementById('modal-title').textContent =
+    d?.name ? `${symbol} — ${d.name}` : symbol;
+  document.getElementById('modal-cost').value   = t.costBasis;
+  document.getElementById('modal-shares').value = t.shares ?? '';
+  document.getElementById('edit-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('modal-cost').focus(), 50);
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  _editSym = null;
+}
+
+function saveEdit() {
+  const cost      = parseFloat(document.getElementById('modal-cost').value);
+  const sharesVal = document.getElementById('modal-shares').value;
+  const shares    = sharesVal ? parseFloat(sharesVal) : null;
+  if (!cost || cost <= 0) { toast('Enter a valid cost basis.', true); return; }
+  const t = S.tickers.find(t => t.symbol === _editSym);
+  if (!t) return;
+  t.costBasis = cost;
+  t.shares    = shares;
+  persist();
+  closeEditModal();
+  render();
+}
+
+// ── View toggle ────────────────────────────────────────────────────
+function toggleView(v) {
+  calView = (v === 'cal');
+  document.getElementById('btn-view-table').classList.toggle('active', !calView);
+  document.getElementById('btn-view-cal').classList.toggle('active', calView);
+  render();
+}
+
+// ── Calendar navigation ────────────────────────────────────────────
+function calPrev() {
+  if (calMonth === 0) { calMonth = 11; calYear--; } else calMonth--;
+  renderCalendar();
+}
+function calNext() {
+  if (calMonth === 11) { calMonth = 0; calYear++; } else calMonth++;
+  renderCalendar();
+}
+function calGoToday() {
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+  renderCalendar();
+}
+
+// ── Calendar helpers ───────────────────────────────────────────────
+// Returns all dates in (year, month) congruent to anchorDateStr mod intervalDays
+function occurrencesInMonth(anchorDateStr, intervalDays, year, month) {
+  const anchor     = new Date(anchorDateStr + 'T12:00:00Z');
+  const monthStart = new Date(Date.UTC(year, month, 1, 12));
+  const monthEnd   = new Date(Date.UTC(year, month + 1, 0, 12));
+  // Rewind to just before the month
+  let d = new Date(anchor);
+  while (d >= monthStart) d = new Date(d.getTime() - intervalDays * 86400000);
+  // Advance through the month collecting hits
+  const results = [];
+  d = new Date(d.getTime() + intervalDays * 86400000);
+  while (d <= monthEnd) {
+    if (d >= monthStart) results.push(d.toISOString().split('T')[0]);
+    d = new Date(d.getTime() + intervalDays * 86400000);
+  }
+  return results;
+}
+
+// ── Calendar render ────────────────────────────────────────────────
+const CAL_MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+const CAL_DOWS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function renderCalendar() {
+  document.getElementById('cal-month-label').textContent = `${CAL_MONTHS[calMonth]} ${calYear}`;
+
+  // Build event map: 'YYYY-MM-DD' -> [{symbol, type}]
+  const events = {};
+  const addEv = (date, symbol, type) => {
+    if (!date) return;
+    (events[date] ??= []).push({ symbol, type });
+  };
+  for (const { symbol } of S.tickers) {
+    const d = S.data[symbol];
+    if (!d || !d.exDividendDate) continue;
+    const intervalDays  = d.frequency ? Math.round(365 / d.frequency) : 91;
+    const exType        = d.isEstimated ? 'est' : 'ex';
+    const payOffsetDays = d.dividendDate
+      ? Math.round((new Date(d.dividendDate + 'T12:00:00Z') - new Date(d.exDividendDate + 'T12:00:00Z')) / 86400000)
+      : null;
+    for (const exDate of occurrencesInMonth(d.exDividendDate, intervalDays, calYear, calMonth)) {
+      addEv(exDate, symbol, exType);
+      if (payOffsetDays !== null) {
+        const payDate = new Date(new Date(exDate + 'T12:00:00Z').getTime() + payOffsetDays * 86400000)
+          .toISOString().split('T')[0];
+        addEv(payDate, symbol, 'pay');
+      }
+    }
+  }
+
+  const now      = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const firstDay = new Date(calYear, calMonth, 1);
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  let html = CAL_DOWS.map(d => `<div class="cal-dow">${d}</div>`).join('');
+
+  // Leading empty cells
+  for (let i = 0; i < firstDay.getDay(); i++) {
+    html += `<div class="cal-cell other-month"></div>`;
+  }
+
+  // Day cells
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday = dateStr === todayStr;
+    const dayEvs  = events[dateStr] || [];
+    const chips   = dayEvs.map(e =>
+      `<span class="cal-chip chip-${e.type}" title="${e.type === 'pay' ? 'Pay' : 'Ex'}-date · ${e.symbol}">${e.symbol}</span>`
+    ).join('');
+    html += `<div class="cal-cell${isToday ? ' today' : ''}">
+      <div class="cal-day-num">${day}</div>
+      <div class="cal-events">${chips}</div>
+    </div>`;
+  }
+
+  // Trailing empty cells to complete the last row
+  const filled = firstDay.getDay() + daysInMonth;
+  const remainder = filled % 7;
+  if (remainder > 0) {
+    for (let i = 0; i < 7 - remainder; i++) {
+      html += `<div class="cal-cell other-month"></div>`;
+    }
+  }
+
+  document.getElementById('cal-grid').innerHTML = html;
+}
+
+// ── Table render helpers ───────────────────────────────────────────
 function sortedTickers() {
   const now = new Date(); now.setHours(0,0,0,0);
   return [...S.tickers].sort((a, b) => {
@@ -474,11 +762,13 @@ function sortedTickers() {
   });
 }
 
+const ICON_EDIT = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
 const ICON_REFRESH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
 const ICON_X = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
 
 function actionBtns(symbol) {
   return `<div class="actions">
+    <button class="btn-icon" onclick="openEditModal('${symbol}')" title="Edit">${ICON_EDIT}</button>
     <button class="btn-icon" onclick="fetchTicker('${symbol}')" title="Refresh">${ICON_REFRESH}</button>
     <button class="btn-icon danger" onclick="removeTicker('${symbol}')" title="Remove">${ICON_X}</button>
   </div>`;
@@ -532,7 +822,7 @@ function renderRow({ symbol, costBasis, shares }) {
     <td><span class="badge">${symbol}</span></td>
     <td><span class="co-name" title="${esc(data.name)}">${esc(data.name)}</span></td>
     <td class="r mono">${fmt$(price)}</td>
-    <td class="r mono" style="color:var(--muted);cursor:pointer" onclick="editCost('${symbol}')" title="Click to edit">${fmt$(costBasis)}</td>
+    <td class="r mono" style="color:var(--muted)">${fmt$(costBasis)}</td>
     <td class="r mono">${shares != null ? fmtN(shares) : '<span style="color:var(--dim)">—</span>'}</td>
     <td class="r">${exCell}</td>
     <td class="r mono" style="color:var(--muted)">${fmtDate(data.dividendDate)}</td>
@@ -570,14 +860,17 @@ function renderSummary() {
   document.getElementById('s-yop').textContent     = yopN ? fmtPct(yopSum / yopN) : '—';
 }
 
+// ── Render ─────────────────────────────────────────────────────────
 function render() {
   const has = S.tickers.length > 0;
   document.getElementById('empty-state').classList.toggle('hidden', has);
-  document.getElementById('table-card').classList.toggle('hidden', !has);
   document.getElementById('summary-strip').classList.toggle('hidden', !has);
+  document.getElementById('table-card').classList.toggle('hidden', !has || calView);
+  document.getElementById('calendar-card').classList.toggle('hidden', !has || !calView);
   if (!has) return;
-  document.getElementById('tbody').innerHTML = sortedTickers().map(renderRow).join('');
   renderSummary();
+  if (calView) renderCalendar();
+  else document.getElementById('tbody').innerHTML = sortedTickers().map(renderRow).join('');
 }
 
 // ── Toast ──────────────────────────────────────────────────────────
@@ -599,7 +892,10 @@ async function init() {
   hydrate();
   render();
 
-  // Check API key status
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeEditModal();
+  });
+
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
     document.getElementById('setup-banner').classList.toggle('hidden', cfg.hasKey);

@@ -35,7 +35,7 @@ async function polyGet(endpoint) {
 }
 
 function estimateNextExDate(lastDate, frequency) {
-  const days = { 12: 30, 4: 91, 2: 182, 1: 365 }[frequency] || 91;
+  const days = { 52: 7, 12: 30, 4: 91, 2: 182, 1: 365 }[frequency] || Math.round(365 / frequency);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   let next = new Date(lastDate + 'T12:00:00Z');
   while (next <= today) next = new Date(next.getTime() + days * 86400000);
@@ -88,6 +88,18 @@ app.get('/api/ticker/:symbol', async (req, res) => {
     if (!exDividendDate && pastDivs.length > 0) {
       exDividendDate = estimateNextExDate(pastDivs[0].ex_dividend_date, frequency);
       isEstimated    = true;
+
+      // Estimate pay date using the same ex→pay offset as the most recent historical dividend
+      const lastEx  = pastDivs[0].ex_dividend_date;
+      const lastPay = pastDivs[0].pay_date;
+      if (lastEx && lastPay) {
+        const offsetDays = Math.round(
+          (new Date(lastPay + 'T12:00:00Z') - new Date(lastEx + 'T12:00:00Z')) / 86400000
+        );
+        const est = new Date(exDividendDate + 'T12:00:00Z');
+        est.setDate(est.getDate() + offsetDays);
+        dividendDate = est.toISOString().split('T')[0];
+      }
     }
 
     const annualDividendRate = distributionAmt ? distributionAmt * frequency : 0;
