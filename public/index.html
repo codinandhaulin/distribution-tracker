@@ -310,8 +310,8 @@
     }
     .chip-ex      { background: rgba(248,81,73,.18);  color: var(--red); }
     .chip-est     { background: rgba(163,113,247,.18); color: var(--purple); }
-    .chip-pay     { background: rgba(63,185,80,.18);   color: var(--green-hi); }
-    .chip-pay-est { background: rgba(139,148,158,.12); color: var(--muted); font-style: italic; }
+    .chip-pay     { background: rgba(63,185,80,.18);   color: var(--green-hi); font-size: 12px; }
+    .chip-pay-est { background: rgba(139,148,158,.12); color: var(--muted); font-style: italic; font-size: 12px; }
 
     .cal-legend {
       padding: 10px 18px; border-top: 1px solid var(--border);
@@ -794,7 +794,20 @@ function renderCalendar() {
   const startPad    = firstDay.getDay();
 
   function makeChips(dateStr) {
-    return (events[dateStr] || []).map(e => {
+    const evs = [...(events[dateStr] || [])];
+    // Pay dates first (desc by amount, nulls last), then ex-dates
+    evs.sort((a, b) => {
+      const aPay = a.type === 'pay', bPay = b.type === 'pay';
+      if (aPay !== bPay) return aPay ? -1 : 1;
+      if (aPay && bPay) {
+        if (a.amount == null && b.amount == null) return 0;
+        if (a.amount == null) return 1;
+        if (b.amount == null) return -1;
+        return b.amount - a.amount;
+      }
+      return 0;
+    });
+    return evs.map(e => {
       const label = e.type === 'pay' && e.amount ? `${e.symbol} ${fmt$(e.amount)}` : e.symbol;
       const chipClass = e.type === 'pay' ? (e.est ? 'chip-pay-est' : 'chip-pay') : `chip-${e.type}`;
       const title = e.type === 'pay'
