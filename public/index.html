@@ -264,7 +264,7 @@
     .cal-today-btn:hover { color: var(--text); border-color: var(--blue); }
 
     .cal-grid {
-      display: grid; grid-template-columns: repeat(7, 1fr);
+      display: grid; grid-template-columns: repeat(7, 1fr) auto;
       border-top: 1px solid var(--border);
     }
     .cal-dow {
@@ -274,12 +274,27 @@
       border-right: 1px solid var(--border);
     }
     .cal-dow:last-child { border-right: none; }
+    .cal-dow-week {
+      padding: 6px 8px; font-size: 10px; font-weight: 600; color: var(--green);
+      text-transform: uppercase; letter-spacing: .05em; text-align: right;
+      background: var(--surface-2); border-bottom: 1px solid var(--border);
+      border-left: 2px solid var(--border); white-space: nowrap;
+    }
+    .cal-week-total {
+      background: rgba(63,185,80,.04); border-left: 2px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 5px 8px; display: flex; align-items: center; justify-content: flex-end;
+      font-size: 11px; font-family: var(--mono); color: var(--green-hi);
+      white-space: nowrap; min-width: 68px;
+    }
     .cal-cell {
       min-height: 76px; padding: 5px 6px;
       border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
     }
-    .cal-cell:nth-child(7n) { border-right: none; }
     .cal-cell.other-month { background: rgba(0,0,0,.15); }
+    #cal-monthly-total { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    #cal-monthly-total .mtl { font-size: 11px; color: var(--muted); }
+    #cal-monthly-total .mtv { font-family: var(--mono); font-weight: 600; color: var(--green-hi); }
     .cal-cell.today { background: rgba(88,166,255,.05); }
     .cal-day-num { font-size: 11px; color: var(--muted); margin-bottom: 3px; font-family: var(--mono); }
     .cal-cell.today .cal-day-num { color: var(--blue); font-weight: 700; }
@@ -452,6 +467,7 @@
         </button>
         <button class="cal-today-btn" onclick="calGoToday()">Today</button>
       </div>
+      <div id="cal-monthly-total"></div>
     </div>
     <div class="cal-grid" id="cal-grid"></div>
     <div class="cal-legend">
@@ -687,61 +703,109 @@ function renderCalendar() {
 
   // Build event map: 'YYYY-MM-DD' -> [{symbol, type}]
   const events = {};
-  const addEv = (date, symbol, type) => {
+  const addEv = (date, symbol, type, amount) => {
     if (!date) return;
-    (events[date] ??= []).push({ symbol, type });
+    (events[date] ??= []).push({ symbol, type, amount });
   };
-  for (const { symbol } of S.tickers) {
+  const calNow   = new Date();
+  const todayStr = `${calNow.getFullYear()}-${String(calNow.getMonth()+1).padStart(2,'0')}-${String(calNow.getDate()).padStart(2,'0')}`;
+  const monthPfx = `${calYear}-${String(calMonth+1).padStart(2,'0')}-`;
+
+  for (const { symbol, shares } of S.tickers) {
     const d = S.data[symbol];
-    if (!d || !d.exDividendDate) continue;
+    if (!d) continue;
+
+    // ── Actual history: plot real ex-dates and pay-dates ──
+    for (const h of (d.history || [])) {
+      if (h.date.startsWith(monthPfx))
+        addEv(h.date, symbol, 'ex');
+      if (h.payDate && h.payDate.startsWith(monthPfx)) {
+        const payAmt = (h.amount && shares) ? shares * h.amount : null;
+        addEv(h.payDate, symbol, 'pay', payAmt);
+      }
+    }
+
+    // ── Future: project forward from the next estimated/declared ex-date ──
+    if (!d.exDividendDate) continue;
+    const histDates     = new Set((d.history || []).map(h => h.date));
     const intervalDays  = d.frequency ? Math.round(365 / d.frequency) : 91;
     const exType        = d.isEstimated ? 'est' : 'ex';
     const payOffsetDays = d.dividendDate
       ? Math.round((new Date(d.dividendDate + 'T12:00:00Z') - new Date(d.exDividendDate + 'T12:00:00Z')) / 86400000)
       : null;
+
     for (const exDate of occurrencesInMonth(d.exDividendDate, intervalDays, calYear, calMonth)) {
+      if (exDate < todayStr || histDates.has(exDate)) continue;
       addEv(exDate, symbol, exType);
       if (payOffsetDays !== null) {
         const payDate = new Date(new Date(exDate + 'T12:00:00Z').getTime() + payOffsetDays * 86400000)
           .toISOString().split('T')[0];
-        addEv(payDate, symbol, 'pay');
+        const payAmt = (d.distributionAmount && shares) ? shares * d.distributionAmount : null;
+        addEv(payDate, symbol, 'pay', payAmt);
       }
     }
   }
 
-  const now      = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  const firstDay = new Date(calYear, calMonth, 1);
-  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-
-  let html = CAL_DOWS.map(d => `<div class="cal-dow">${d}</div>`).join('');
-
-  // Leading empty cells
-  for (let i = 0; i < firstDay.getDay(); i++) {
-    html += `<div class="cal-cell other-month"></div>`;
-  }
-
-  // Day cells
-  for (let day = 1; day <= daysInMonth; day++) {
-    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const isToday = dateStr === todayStr;
-    const dayEvs  = events[dateStr] || [];
-    const chips   = dayEvs.map(e =>
-      `<span class="cal-chip chip-${e.type}" title="${e.type === 'pay' ? 'Pay' : 'Ex'}-date · ${e.symbol}">${e.symbol}</span>`
-    ).join('');
-    html += `<div class="cal-cell${isToday ? ' today' : ''}">
-      <div class="cal-day-num">${day}</div>
-      <div class="cal-events">${chips}</div>
-    </div>`;
-  }
-
-  // Trailing empty cells to complete the last row
-  const filled = firstDay.getDay() + daysInMonth;
-  const remainder = filled % 7;
-  if (remainder > 0) {
-    for (let i = 0; i < 7 - remainder; i++) {
-      html += `<div class="cal-cell other-month"></div>`;
+  // Monthly total
+  let monthlyTotal = 0, hasMonthlyAmt = false;
+  for (const evs of Object.values(events)) {
+    for (const ev of evs) {
+      if (ev.type === 'pay' && ev.amount != null) { monthlyTotal += ev.amount; hasMonthlyAmt = true; }
     }
+  }
+  document.getElementById('cal-monthly-total').innerHTML = hasMonthlyAmt
+    ? `<span class="mtl">Month Total</span><span class="mtv">${fmt$(monthlyTotal)}</span>`
+    : '';
+
+  // Build flat cell list then emit with week-total cells
+  const firstDay    = new Date(calYear, calMonth, 1);
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const startPad    = firstDay.getDay();
+
+  function makeChips(dateStr) {
+    return (events[dateStr] || []).map(e => {
+      const label = e.type === 'pay' && e.amount ? `${e.symbol} ${fmt$(e.amount)}` : e.symbol;
+      return `<span class="cal-chip chip-${e.type}" title="${e.type === 'pay' ? 'Pay' : 'Ex'}-date · ${e.symbol}">${label}</span>`;
+    }).join('');
+  }
+
+  function weekTotalHtml(dateCells) {
+    let tot = 0, has = false;
+    for (const ds of dateCells) {
+      if (!ds) continue;
+      for (const ev of (events[ds] || [])) {
+        if (ev.type === 'pay' && ev.amount != null) { tot += ev.amount; has = true; }
+      }
+    }
+    return `<div class="cal-week-total">${has ? fmt$(tot) : ''}</div>`;
+  }
+
+  // All cells: [null = pad, 'YYYY-MM-DD' = real day]
+  const cells = [
+    ...Array(startPad).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => {
+      const d = i + 1;
+      return `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    })
+  ];
+  const trail = cells.length % 7;
+  if (trail > 0) for (let i = 0; i < 7 - trail; i++) cells.push(null);
+
+  let html = CAL_DOWS.map(d => `<div class="cal-dow">${d}</div>`).join('') +
+             `<div class="cal-dow-week">Week</div>`;
+
+  for (let i = 0; i < cells.length; i++) {
+    const ds = cells[i];
+    if (ds === null) {
+      html += `<div class="cal-cell other-month"></div>`;
+    } else {
+      const isToday = ds === todayStr;
+      html += `<div class="cal-cell${isToday ? ' today' : ''}">
+        <div class="cal-day-num">${Number(ds.slice(8))}</div>
+        <div class="cal-events">${makeChips(ds)}</div>
+      </div>`;
+    }
+    if ((i + 1) % 7 === 0) html += weekTotalHtml(cells.slice(i - 6, i + 1));
   }
 
   document.getElementById('cal-grid').innerHTML = html;

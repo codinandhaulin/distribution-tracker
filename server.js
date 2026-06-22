@@ -114,7 +114,8 @@ app.get('/api/ticker/:symbol', async (req, res) => {
       distributionAmount: distributionAmt,
       frequency,
       isEstimated,
-      currency: 'USD'
+      currency: 'USD',
+      history: allDivs.map(d => ({ date: d.ex_dividend_date, amount: d.cash_amount, payDate: d.pay_date || null }))
     });
 
   } catch (err) {
