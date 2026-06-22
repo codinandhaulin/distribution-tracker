@@ -67,6 +67,14 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Columns: Ticker, Company, Price, Cost/Sh, Shares, Ex-Date, Pay Date, Dist/Sh, Freq, Ann. Rate, Yield/Price, Yield/Cost, Est. Payout, Ann. Payout
 - Ann. Payout = `shares × annualDividendRate` (highlighted column)
 
+### 12-Month Payout Forecast chart
+- Vertical bar chart card between the summary strip and the table/calendar
+- Computes projected pay dates for each ticker for the next 12 months using `occurrencesInMonth()` + pay-date offset
+- Bars scaled to the highest month; current month highlighted; abbreviated `$1.2k` labels above each bar
+- Annual total shown in chart header
+- Hover tooltip shows per-ticker breakdown for that month, sorted by amount descending
+- `computeMonthlyProjections()` attributes amounts to the **pay-date month** (not ex-date month)
+
 ### Calendar view
 - 8-column CSS grid (7 days + week total column)
 - Per-cell chip ordering: pay-date chips first (desc by amount), then ex-date chips
@@ -87,3 +95,24 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Polygon free tier (5 req/min) makes bulk initial import slow (~30s per uncached ticker)
 - Some tickers (mutual funds, Fidelity-exclusive funds) will always fail Polygon lookup
 - Pay dates for future events are estimated using the historical ex→pay offset from the most recent dividend record
+
+## Working notes (for Claude — read on every new session)
+
+**Owner:** Martin Bradley (mbradley@codematters.com). Personal finance tool for his own portfolio.
+
+**Portfolio profile:** High-yield covered-call ETFs (MSTY, CONY, TSLY, AIPI, QQQI, BLOX, SPYI, TSPY, etc.), some BDCs (PBDC, CSWC), and a few growth positions (VOO, VUG, PYPL, RTX). Holds positions across both Margin and Cash accounts at Fidelity — CSV exports contain duplicate symbol rows that must be merged (shares summed, cost basis weighted-averaged).
+
+**How Martin likes to work:**
+- Keep solutions simple — this is a personal tool, not a production codebase. Prefer editing existing functions over adding new abstraction layers. Three similar lines beats a premature helper.
+- Update CLAUDE.md continuously after every meaningful change, not just at end of session.
+- If Martin says "respond with TEXT ONLY and not call any tools" — obey literally, no tool calls for that response. He uses this during sensitive operations (e.g. mid-import when 429 errors are flying).
+- When proposing UI changes, give 2–3 concrete options with a clear recommendation before building. Martin will say "yes" or redirect.
+
+**Fidelity CSV format (already handled in code):**
+- Column `Average Cost Basis` = per-share cost (not total)
+- Column `Cost Basis Total` = total cost (divide by quantity for per-share)
+- `SPAXX**` (money market sweep) has no quantity/cost and is auto-skipped
+- `Pending activity` rows are filtered by the `pending` keyword check
+- Duplicate rows per symbol (margin + cash lots) are merged in `handleCSVFile()`
+
+**GitHub:** https://github.com/codinandhaulin/distribution-tracker

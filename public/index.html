@@ -325,6 +325,56 @@
     }
     .cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 
+    /* ── Bar chart ── */
+    .chart-wrap { padding: 16px 18px 10px; }
+    .bar-chart { display: flex; gap: 6px; height: 180px; align-items: stretch; }
+    .bar-col {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      min-width: 0; cursor: default;
+    }
+    .bar-spacer { flex: 1; }
+    .bar-amt {
+      font-size: 9px; color: var(--muted); font-family: var(--mono);
+      margin-bottom: 3px; white-space: nowrap;
+    }
+    .bar {
+      width: 100%; border-radius: 3px 3px 0 0; flex-shrink: 0;
+      background: rgba(63,185,80,.25); transition: background .1s;
+    }
+    .bar-col:hover .bar    { background: rgba(63,185,80,.55); }
+    .bar-col.cur-month .bar { background: rgba(63,185,80,.48); }
+    .bar-col.cur-month:hover .bar { background: rgba(63,185,80,.7); }
+    .bar-lbl {
+      margin-top: 5px; font-size: 10px; font-weight: 600; letter-spacing: .03em;
+      color: var(--muted); text-transform: uppercase; text-align: center; line-height: 1.3;
+    }
+    .bar-col.cur-month .bar-lbl { color: var(--fg); }
+    .bar-col.next-year .bar { background: rgba(56,139,253,.22); }
+    .bar-col.next-year:hover .bar { background: rgba(56,139,253,.48); }
+    .bar-col.year-break { position: relative; margin-left: 10px; }
+    .bar-col.year-break::before {
+      content: attr(data-year);
+      position: absolute; left: -9px; top: 50%;
+      transform: translateX(-50%) rotate(-90deg);
+      font-size: 8px; font-weight: 700; letter-spacing: .06em;
+      color: var(--dim); white-space: nowrap; pointer-events: none;
+    }
+    /* ── Chart tooltip ── */
+    #chart-tip {
+      position: fixed; z-index: 200; display: none; pointer-events: none;
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; min-width: 190px; box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    }
+    .tip-header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 16px; font-weight: 600; font-size: 12px;
+      padding-bottom: 7px; margin-bottom: 6px; border-bottom: 1px solid var(--border);
+    }
+    .tip-total { color: var(--green-hi); font-family: var(--mono); }
+    .tip-row { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; font-size: 11px; }
+    .tip-sym { color: var(--accent); font-family: var(--mono); font-weight: 700; }
+    .tip-amt { color: var(--fg); font-family: var(--mono); }
+
     @media (max-width: 600px) {
       .add-form { flex-direction: column; align-items: stretch; }
       .field input, #inp-symbol, #inp-shares { width: 100%; }
@@ -450,6 +500,17 @@
     </div>
   </div>
 
+  <!-- 12-month payout chart -->
+  <div class="card hidden" id="chart-card">
+    <div class="card-header">
+      <h2>12-Month Payout Forecast</h2>
+      <span class="stat-value green" id="chart-annual-ttl" style="font-size:14px"></span>
+    </div>
+    <div class="chart-wrap">
+      <div class="bar-chart" id="bar-chart"></div>
+    </div>
+  </div>
+
   <!-- Table view -->
   <div class="card hidden" id="table-card">
     <div class="card-header">
@@ -505,6 +566,7 @@
 </main>
 
 <div id="toast"></div>
+<div id="chart-tip"></div>
 
 <!-- Edit modal -->
 <div class="modal-overlay hidden" id="edit-modal" onclick="if(event.target===this)closeEditModal()">
@@ -1080,15 +1142,84 @@ function renderSummary() {
   document.getElementById('s-annual').textContent  = hasAnnual ? fmt$(annualTotal) : '—';
 }
 
+// ── 12-month payout chart ──────────────────────────────────────────
+let chartMonths = [];
+const CAL_MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtBar = v => !v ? '' : v >= 10000 ? `$${(v/1000).toFixed(0)}k` : v >= 1000 ? `$${(v/1000).toFixed(1)}k` : fmt$(v, 0);
+
+function computeMonthlyProjections() {
+  const now = new Date();
+  const nowY = now.getFullYear(), nowM = now.getMonth();
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const t = nowM + i, y = nowY + Math.floor(t / 12), m = t % 12;
+    return { year: y, month: m, total: 0, breakdown: [] };
+  });
+  const idxMap = {};
+  months.forEach((m, i) => { idxMap[`${m.year}-${String(m.month+1).padStart(2,'0')}`] = i; });
+
+  for (const { symbol, shares } of S.tickers) {
+    const d = S.data[symbol];
+    if (!d?.exDividendDate || !d.distributionAmount || !shares) continue;
+    const intervalDays = d.frequency ? Math.round(365 / d.frequency) : 91;
+    const payOffset    = d.dividendDate
+      ? Math.round((new Date(d.dividendDate+'T12:00:00Z') - new Date(d.exDividendDate+'T12:00:00Z')) / 86400000)
+      : 14;
+    for (const slot of months) {
+      for (const exDate of occurrencesInMonth(d.exDividendDate, intervalDays, slot.year, slot.month)) {
+        const pd  = new Date(new Date(exDate+'T12:00:00Z').getTime() + payOffset * 86400000);
+        const key = `${pd.getUTCFullYear()}-${String(pd.getUTCMonth()+1).padStart(2,'0')}`;
+        const si  = idxMap[key];
+        if (si == null) continue;
+        const amt = shares * d.distributionAmount;
+        months[si].total += amt;
+        const ex = months[si].breakdown.find(b => b.symbol === symbol);
+        if (ex) ex.amount += amt; else months[si].breakdown.push({ symbol, amount: amt });
+      }
+    }
+  }
+  return months;
+}
+
+function renderChart() {
+  chartMonths = computeMonthlyProjections();
+  const totals  = chartMonths.map(m => m.total).filter(t => t > 0);
+  const max     = Math.max(...totals, 1);
+  // Lift the Y-axis floor so differences between months are visible.
+  // Floor = 80% of the lowest non-zero month, clamped so bars stay meaningful.
+  const minVal  = totals.length ? Math.min(...totals) : 0;
+  const floor   = minVal > 0 ? minVal * 0.8 : 0;
+  const range   = max - floor || 1;
+  const BAR_MAX_H = 120, now = new Date();
+  const annTotal = chartMonths.reduce((s, m) => s + m.total, 0);
+  document.getElementById('chart-annual-ttl').textContent = annTotal > 0 ? fmt$(annTotal) : '';
+  const thisYear = now.getFullYear();
+  document.getElementById('bar-chart').innerHTML = chartMonths.map((m, i) => {
+    const h          = m.total > 0 ? Math.max(Math.round((m.total - floor) / range * BAR_MAX_H), 4) : 0;
+    const isCur      = m.year === thisYear && m.month === now.getMonth();
+    const isNextYear = m.year !== thisYear;
+    const isBreak    = isNextYear && (i === 0 || chartMonths[i-1].year === thisYear);
+    const cls = ['bar-col', isCur && 'cur-month', isNextYear && 'next-year', isBreak && 'year-break']
+      .filter(Boolean).join(' ');
+    return `<div class="${cls}" data-idx="${i}"${isBreak ? ` data-year="${m.year}"` : ''}>
+      <div class="bar-spacer"></div>
+      <div class="bar-amt">${fmtBar(m.total)}</div>
+      <div class="bar" style="height:${h}px"></div>
+      <div class="bar-lbl">${CAL_MONTHS_SHORT[m.month]}</div>
+    </div>`;
+  }).join('');
+}
+
 // ── Render ─────────────────────────────────────────────────────────
 function render() {
   const has = S.tickers.length > 0;
   document.getElementById('empty-state').classList.toggle('hidden', has);
   document.getElementById('summary-strip').classList.toggle('hidden', !has);
+  document.getElementById('chart-card').classList.toggle('hidden', !has);
   document.getElementById('table-card').classList.toggle('hidden', !has || calView);
   document.getElementById('calendar-card').classList.toggle('hidden', !has || !calView);
   if (!has) return;
   renderSummary();
+  renderChart();
   if (calView) renderCalendar();
   else {
     renderHeaders();
@@ -1237,6 +1368,32 @@ async function init() {
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeEditModal();
+  });
+
+  const chartTip = document.getElementById('chart-tip');
+  document.getElementById('bar-chart').addEventListener('mouseover', e => {
+    const col = e.target.closest('.bar-col[data-idx]');
+    if (!col) return;
+    const m = chartMonths[+col.dataset.idx];
+    if (!m?.total) { chartTip.style.display = 'none'; return; }
+    const rows = [...m.breakdown].sort((a, b) => b.amount - a.amount)
+      .map(b => `<div class="tip-row"><span class="tip-sym">${b.symbol}</span><span class="tip-amt">${fmt$(b.amount)}</span></div>`)
+      .join('');
+    chartTip.innerHTML = `<div class="tip-header"><span>${CAL_MONTHS[m.month]} ${m.year}</span><span class="tip-total">${fmt$(m.total)}</span></div>${rows}`;
+    chartTip.style.display = 'block';
+    const colR    = col.getBoundingClientRect();
+    const chartR  = document.getElementById('bar-chart').getBoundingClientRect();
+    const tw = chartTip.offsetWidth, th = chartTip.offsetHeight;
+    let left = colR.left + colR.width / 2 - tw / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+    // Always show above the chart area; fall below only if no room
+    let top = chartR.top - th - 8;
+    if (top < 8) top = chartR.bottom + 8;
+    chartTip.style.left = left + 'px';
+    chartTip.style.top  = top + 'px';
+  });
+  document.getElementById('bar-chart').addEventListener('mouseleave', () => {
+    chartTip.style.display = 'none';
   });
 
   document.getElementById('thead-row').addEventListener('click', e => {
