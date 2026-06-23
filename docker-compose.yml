@@ -1,0 +1,12 @@
+services:
+  distribution-tracker:
+    build: .
+    container_name: distribution-tracker
+    ports:
+      - "3000:3000"
+    environment:
+      - POLYGON_KEY=${POLYGON_KEY}
+      - USERS=${USERS}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

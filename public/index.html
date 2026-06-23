@@ -381,9 +381,52 @@
       .cal-chip { font-size: 9px; padding: 1px 3px; }
       .cal-cell { min-height: 56px; padding: 3px 4px; }
     }
+
+    /* ── Login screen ── */
+    #login-screen {
+      position: fixed; inset: 0; background: var(--bg);
+      display: none; align-items: center; justify-content: center; z-index: 200;
+    }
+    .login-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 36px 32px; width: 340px;
+      display: flex; flex-direction: column; gap: 18px;
+    }
+    .login-card h2 { font-size: 18px; font-weight: 600; }
+    .login-card .brand { margin-bottom: 4px; }
+    .login-err {
+      background: rgba(248,81,73,.1); border: 1px solid var(--red);
+      color: var(--red); border-radius: 6px; padding: 8px 12px; font-size: 13px;
+    }
+    #user-chip {
+      font-size: 12px; color: var(--muted);
+      display: flex; align-items: center; gap: 8px;
+    }
   </style>
 </head>
 <body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+        <polyline points="16 7 22 7 22 13"/>
+      </svg>
+      <h2>Distribution Tracker</h2>
+    </div>
+    <div id="login-err" class="login-err" style="display:none"></div>
+    <div class="field">
+      <label>Username</label>
+      <input id="login-user" type="text" autocomplete="username" placeholder="username">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="login-pass" type="password" autocomplete="current-password" placeholder="password">
+    </div>
+    <button class="btn btn-green" onclick="login()">Sign in</button>
+  </div>
+</div>
 
 <header>
   <div class="header-inner">
@@ -407,6 +450,10 @@
         </svg>
         Refresh All
       </button>
+      <div id="user-chip" style="display:none">
+        <span id="user-label"></span>
+        <button class="btn" style="padding:4px 8px;font-size:11px" onclick="logout()">Sign out</button>
+      </div>
     </div>
   </div>
 </header>
@@ -611,11 +658,46 @@ let calView    = false;
 let calYear    = new Date().getFullYear();
 let calMonth   = new Date().getMonth(); // 0-indexed
 let _editSym   = null;
+let currentUser = null;
+
+// ── Auth ───────────────────────────────────────────────────────────
+async function login() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-err');
+  errEl.style.display = 'none';
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const j = await r.json();
+    if (!r.ok) { errEl.textContent = j.error || 'Login failed'; errEl.style.display = 'block'; return; }
+    currentUser = j.username;
+    document.getElementById('login-screen').style.display = 'none';
+    await startApp();
+  } catch { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; }
+}
+
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.reload();
+}
 
 // ── Persistence ────────────────────────────────────────────────────
-function persist() { localStorage.setItem('dt2_tickers', JSON.stringify(S.tickers)); }
-function hydrate() {
-  try { const r = localStorage.getItem('dt2_tickers'); if (r) S.tickers = JSON.parse(r); } catch {}
+function persist() {
+  fetch('/api/portfolio', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(S.tickers)
+  }).catch(e => console.error('Failed to save portfolio:', e));
+}
+async function hydrate() {
+  try {
+    const r = await fetch('/api/portfolio');
+    if (r.ok) S.tickers = await r.json();
+  } catch {}
 }
 
 // ── Format helpers ─────────────────────────────────────────────────
@@ -641,49 +723,29 @@ const FREQ_LABEL = { 52:'Weekly', 12:'Monthly', 4:'Quarterly', 2:'Semi-Ann', 1:'
 const freqLabel = f => FREQ_LABEL[f] || `×${f}/yr`;
 
 // ── API ────────────────────────────────────────────────────────────
-// ── Ticker data cache (localStorage, 12h TTL) ──────────────────────
-const TCACHE_KEY = 'dt2_cache';
-const TCACHE_TTL = 12 * 60 * 60 * 1000;
-function tcacheGet(sym) {
-  try {
-    const e = JSON.parse(localStorage.getItem(TCACHE_KEY) || '{}')[sym];
-    return e && Date.now() - e.ts < TCACHE_TTL ? e.d : null;
-  } catch { return null; }
-}
-function tcacheSet(sym, data) {
-  try {
-    const store = JSON.parse(localStorage.getItem(TCACHE_KEY) || '{}');
-    store[sym] = { d: data, ts: Date.now() };
-    localStorage.setItem(TCACHE_KEY, JSON.stringify(store));
-  } catch {}
-}
+// Ticker data cache now lives on the server (data/ticker-cache.json).
+// _fromCache in API responses tells us whether Polygon was actually called.
 
 async function fetchTicker(symbol, force = false) {
-  if (!force) {
-    const hit = tcacheGet(symbol);
-    if (hit) {
-      S.data[symbol] = hit; S.loading[symbol] = false; S.errors[symbol] = null;
-      render();
-      return false; // cache hit — no API call
-    }
-  }
   S.loading[symbol] = true; S.errors[symbol] = null;
   render();
+  let wasApiCall = true;
   try {
     const url = `/api/ticker/${encodeURIComponent(symbol)}${force ? '?force=1' : ''}`;
     const r = await fetch(url);
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    wasApiCall = !j._fromCache;
+    delete j._fromCache;
     S.data[symbol] = j;
     S.errors[symbol] = null;
-    tcacheSet(symbol, j);
   } catch (e) {
     S.data[symbol] = null;
     S.errors[symbol] = e.message;
   }
   S.loading[symbol] = false;
   render();
-  return true; // API call was made
+  return wasApiCall;
 }
 
 // ── Actions ────────────────────────────────────────────────────────
@@ -1245,25 +1307,18 @@ function esc(s) { return String(s||'').replace(/[&<>"']/g, c =>
 // Fetch tickers one at a time; only rate-limit actual API calls (not cache hits).
 // Polygon free tier: 5 req/min. Each ticker → 3 Polygon calls, so space them ~15s apart.
 async function batchFetch(tickers, force = false) {
-  const API_DELAY = 30000; // ms between real Polygon fetches (Polygon free = 5 req/min; 3 calls/ticker → need ≥30s gap)
-  let lastApiAt = 0;
-  let apiCount = 0, total = tickers.filter(t => force || !tcacheGet(t.symbol)).length;
-  const updateProgress = (n) => {
-    if (total > 0) {
-      const el = document.getElementById('last-updated');
-      if (el) el.textContent = `Fetching ${n}/${total} from Polygon…`;
+  const API_DELAY = 30000; // 30s between real Polygon calls (free tier: 5 req/min, 3 calls/ticker)
+  let apiCount = 0;
+  const setStatus = msg => { const el = document.getElementById('last-updated'); if (el) el.textContent = msg; };
+  for (let i = 0; i < tickers.length; i++) {
+    const wasApiCall = await fetchTicker(tickers[i].symbol, force);
+    if (wasApiCall) {
+      apiCount++;
+      if (i < tickers.length - 1) { // more tickers remain — pace before next Polygon hit
+        setStatus(`Fetched ${apiCount} from Polygon — waiting before next…`);
+        await new Promise(r => setTimeout(r, API_DELAY));
+      }
     }
-  };
-  for (const t of tickers) {
-    const needsApi = force || !tcacheGet(t.symbol);
-    if (needsApi) {
-      const elapsed = Date.now() - lastApiAt;
-      if (lastApiAt > 0 && elapsed < API_DELAY)
-        await new Promise(r => setTimeout(r, API_DELAY - elapsed));
-      updateProgress(++apiCount);
-      lastApiAt = Date.now();
-    }
-    await fetchTicker(t.symbol, force);
   }
 }
 
@@ -1361,9 +1416,9 @@ async function handleCSVFile(input) {
 }
 
 // ── Init ───────────────────────────────────────────────────────────
-async function init() {
-  hydrate();
-  toggleAddCard(S.tickers.length === 0); // open when empty, collapsed when portfolio exists
+async function startApp() {
+  await hydrate();
+  toggleAddCard(S.tickers.length === 0);
   render();
 
   document.addEventListener('keydown', e => {
@@ -1381,12 +1436,11 @@ async function init() {
       .join('');
     chartTip.innerHTML = `<div class="tip-header"><span>${CAL_MONTHS[m.month]} ${m.year}</span><span class="tip-total">${fmt$(m.total)}</span></div>${rows}`;
     chartTip.style.display = 'block';
-    const colR    = col.getBoundingClientRect();
-    const chartR  = document.getElementById('bar-chart').getBoundingClientRect();
+    const colR  = col.getBoundingClientRect();
+    const chartR = document.getElementById('bar-chart').getBoundingClientRect();
     const tw = chartTip.offsetWidth, th = chartTip.offsetHeight;
     let left = colR.left + colR.width / 2 - tw / 2;
     left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
-    // Always show above the chart area; fall below only if no room
     let top = chartR.top - th - 8;
     if (top < 8) top = chartR.bottom + 8;
     chartTip.style.left = left + 'px';
@@ -1408,12 +1462,40 @@ async function init() {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
     document.getElementById('setup-banner').classList.toggle('hidden', cfg.hasKey);
-  } catch { /* server might not be ready */ }
+  } catch {}
 
   if (S.tickers.length > 0) {
+    // Parallel on page load — server cache handles all requests from memory on warm starts.
+    // batchFetch (sequential + 30s pacing) is reserved for Refresh All and CSV import,
+    // where we know Polygon calls will be needed.
     await Promise.all(S.tickers.map(t => fetchTicker(t.symbol)));
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   }
+}
+
+async function init() {
+  try {
+    const r = await fetch('/api/me');
+    if (!r.ok) {
+      const ls = document.getElementById('login-screen');
+      ls.style.display = 'flex';
+      document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+      document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-pass').focus(); });
+      return;
+    }
+    const me = await r.json();
+    currentUser = me.username;
+    if (me.authEnabled) {
+      const chip = document.getElementById('user-chip');
+      document.getElementById('user-label').textContent = me.username;
+      chip.style.display = 'flex';
+    }
+  } catch {
+    // Server unreachable — show login
+    document.getElementById('login-screen').style.display = 'flex';
+    return;
+  }
+  await startApp();
 }
 
 init();
