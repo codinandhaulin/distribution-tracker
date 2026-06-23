@@ -6,7 +6,7 @@ const S = {
   errors:  {}    // {symbol: string | null}
 };
 
-let calView    = false;
+let calView    = true;
 let calYear    = new Date().getFullYear();
 let calMonth   = new Date().getMonth(); // 0-indexed
 let _editSym   = null;
