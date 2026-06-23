@@ -632,7 +632,7 @@ function renderChart() {
   }).join('');
 }
 
-// ── Symbol detail modal ────────────────────────────────────────────
+// ── Ticker detail modal ────────────────────────────────────────────
 function projectFutureDates(d, count = 4) {
   if (!d.exDividendDate || !d.frequency) return [];
   const intervalDays = Math.round(365 / d.frequency);
@@ -659,7 +659,7 @@ function openSymbolModal(symbol) {
   const body = document.getElementById('sym-modal-body');
 
   if (!d) {
-    body.innerHTML = '<p style="color:var(--muted);padding:16px 18px">No data loaded for this symbol yet.</p>';
+    body.innerHTML = '<p style="color:var(--muted);padding:16px 18px">No data loaded for this ticker yet.</p>';
     document.getElementById('symbol-modal').classList.remove('hidden');
     return;
   }
@@ -859,7 +859,7 @@ async function handleCSVFile(input) {
       headerIdx = i; rawHeaders = cols; break;
     }
   }
-  if (headerIdx < 0) { toast('No "Symbol" column found — check CSV format.', true); return; }
+  if (headerIdx < 0) { toast('No "Ticker" or "Symbol" column found — check CSV format.', true); return; }
 
   const h = rawHeaders.map(c => c.toLowerCase());
   const symIdx    = h.findIndex(c => /^(symbol|ticker)$/.test(c));
@@ -889,7 +889,7 @@ async function handleCSVFile(input) {
     positions.push({ symbol, costBasis, shares: shares > 0 ? shares : null });
   }
 
-  // Merge duplicate symbols: sum shares, weighted-average cost basis
+  // Merge duplicate tickers: sum shares, weighted-average cost basis
   const bySymbol = new Map();
   for (const p of positions) {
     if (bySymbol.has(p.symbol)) {

@@ -381,7 +381,7 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
   display: flex; align-items: center; gap: 8px;
 }
 
-/* ── Symbol detail modal ── */
+/* ── Ticker detail modal ── */
 .modal-wide { width: 640px; }
 
 .sym-stats {

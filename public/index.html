@@ -92,7 +92,7 @@
     <div class="add-card-body" id="add-card-body">
       <div class="add-form">
         <div class="field">
-          <label>Symbol</label>
+          <label>Ticker</label>
           <input id="inp-symbol" type="text" placeholder="JEPI" maxlength="12"
                  oninput="this.value=this.value.toUpperCase()"
                  onkeydown="if(event.key==='Enter') addTicker()">
@@ -212,7 +212,7 @@
       <path d="M3 9h18M9 21V9"/><path d="M15 13v4M12 14v3"/>
     </svg>
     <h3>No tickers added yet</h3>
-    <p>Add a ticker symbol above to start tracking upcoming distributions.</p>
+    <p>Add a ticker above to start tracking upcoming distributions.</p>
   </div>
 
 </main>
@@ -250,7 +250,7 @@
   </div>
 </div>
 
-<!-- Symbol detail modal -->
+<!-- Ticker detail modal -->
 <div class="modal-overlay hidden" id="symbol-modal" onclick="if(event.target===this)closeSymbolModal()">
   <div class="modal modal-wide">
     <div class="modal-header">

@@ -173,7 +173,7 @@ async function fetchFromPolygon(symbol) {
   ]);
 
   const price = prevClose?.results?.[0]?.c;
-  if (!price) { const e = new Error(`"${symbol}" not found or has no price data.`); e.notFound = true; throw e; }
+  if (!price) { const e = new Error(`Ticker "${symbol}" not found or has no price data.`); e.notFound = true; throw e; }
 
   const name    = tickerRef?.results?.name || symbol;
   const allDivs = (divResp?.results || []).filter(d => d.cash_amount > 0);

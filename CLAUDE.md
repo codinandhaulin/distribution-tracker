@@ -124,15 +124,15 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Weekly subtotals and monthly total shown
 - Pay chips show inline delta vs prior distribution: `▲6.2%` (green) or `▼3.1%` (red) when a prior exists; tooltip shows per-share dollar detail ("Prev: $0.48/sh → $0.51/sh (+6.2%)")
 - Today's date number rendered as blue filled circle
-- Same-symbol pay events on same date merged (`addEv()` sums amounts and perShare)
+- Same-ticker pay events on same date merged (`addEv()` sums amounts and perShare)
 - Daily payout total shown top-right of each cell in green mono
 
 ### Add / Import card
 - Collapsible — auto-collapsed on load when portfolio exists, auto-expanded when empty
-- Manual add: symbol + cost basis + shares
+- Manual add: ticker + cost basis + shares
 - CSV import: auto-detects Fidelity format (`Average Cost Basis` = per-share, `Cost Basis Total` = total)
-- Default CSV mode = **merge** (update existing symbols, add new ones, leave others untouched); "Replace all" checkbox for full replace
-- Duplicate symbols across CSV rows (e.g. margin + cash accounts) are merged: shares summed, cost basis weighted-averaged
+- Default CSV mode = **merge** (update existing tickers, add new ones, leave others untouched); "Replace all" checkbox for full replace
+- Duplicate tickers across CSV rows (e.g. margin + cash accounts) are merged: shares summed, cost basis weighted-averaged
 - Mutual funds without exchange listings (e.g. FNILX) are not found by Polygon and will show an error — remove them manually
 
 ## Known limitations
@@ -145,7 +145,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 
 **Owner:** Martin Bradley (mbradley@codematters.com). Personal finance tool for his own portfolio.
 
-**Portfolio profile:** High-yield covered-call ETFs (MSTY, CONY, TSLY, AIPI, QQQI, BLOX, SPYI, TSPY, etc.), some BDCs (PBDC, CSWC), and a few growth positions (VOO, VUG, PYPL, RTX). Holds positions across both Margin and Cash accounts at Fidelity — CSV exports contain duplicate symbol rows that must be merged (shares summed, cost basis weighted-averaged).
+**Portfolio profile:** High-yield covered-call ETFs (MSTY, CONY, TSLY, AIPI, QQQI, BLOX, SPYI, TSPY, etc.), some BDCs (PBDC, CSWC), and a few growth positions (VOO, VUG, PYPL, RTX). Holds positions across both Margin and Cash accounts at Fidelity — CSV exports contain duplicate ticker rows that must be merged (shares summed, cost basis weighted-averaged).
 
 **How Martin likes to work:**
 - Keep solutions simple — this is a personal tool, not a production codebase. Prefer editing existing functions over adding new abstraction layers. Three similar lines beats a premature helper.
@@ -158,6 +158,6 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Column `Cost Basis Total` = total cost (divide by quantity for per-share)
 - `SPAXX**` (money market sweep) has no quantity/cost and is auto-skipped
 - `Pending activity` rows are filtered by the `pending` keyword check
-- Duplicate rows per symbol (margin + cash lots) are merged in `handleCSVFile()`
+- Duplicate rows per ticker (margin + cash lots) are merged in `handleCSVFile()`
 
 **GitHub:** https://github.com/codinandhaulin/distribution-tracker
