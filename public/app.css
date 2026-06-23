@@ -381,6 +381,71 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
   display: flex; align-items: center; gap: 8px;
 }
 
+/* ── Symbol detail modal ── */
+.modal-wide { width: 640px; }
+
+.sym-stats {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.sym-stat { font-size: 12px; color: var(--muted); }
+.sym-stat strong { color: var(--text); font-weight: 600; }
+.sym-stat strong.hi { color: var(--green-hi); }
+
+.sym-section { padding: 14px 18px 0; }
+.sym-section-lbl {
+  font-size: 10px; font-weight: 600; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px;
+}
+
+.hist-chart {
+  display: flex; gap: 3px; height: 110px; align-items: stretch;
+  padding-bottom: 2px;
+}
+.hist-bar-col {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  align-items: center; cursor: default;
+}
+.hist-bar-col .hbc-spacer { flex: 1; }
+.hist-bar {
+  width: 100%; border-radius: 2px 2px 0 0; flex-shrink: 0;
+  background: rgba(63,185,80,.28); transition: background .1s;
+}
+.hist-bar-col:hover .hist-bar { background: rgba(63,185,80,.55); }
+.hist-bar-col.hbc-future .hist-bar { background: rgba(56,139,253,.22); }
+.hist-bar-col.hbc-future:hover .hist-bar { background: rgba(56,139,253,.5); }
+.hist-bar-lbl {
+  margin-top: 4px; font-size: 8px; color: var(--dim);
+  white-space: nowrap; text-align: center; letter-spacing: .02em;
+  min-height: 10px;
+}
+.hist-bar-col.hbc-future .hist-bar-lbl { color: rgba(88,166,255,.5); }
+
+.hist-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.hist-table th {
+  padding: 6px 18px; text-align: left; font-size: 10px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--border); background: var(--surface-2);
+  position: sticky; top: 0; z-index: 1;
+}
+.hist-table th.r { text-align: right; }
+.hist-table td {
+  padding: 6px 18px; border-bottom: 1px solid rgba(48,54,61,.4);
+  font-family: var(--mono); color: var(--text);
+}
+.hist-table td.label { font-family: var(--font); color: var(--muted); font-size: 11px; }
+.hist-table tr:last-child td { border-bottom: none; }
+.hist-table tr.est-row td { color: var(--muted); }
+.hist-table tr.divider td {
+  padding: 4px 18px; font-size: 10px; color: var(--dim);
+  letter-spacing: .05em; text-transform: uppercase;
+  font-family: var(--font); background: rgba(48,54,61,.2);
+  border-bottom: 1px solid var(--border);
+}
+
 @media (max-width: 600px) {
   .add-form { flex-direction: column; align-items: stretch; }
   .field input, #inp-symbol, #inp-shares { width: 100%; }

@@ -318,7 +318,7 @@ function renderCalendar() {
       const chipClass = e.type === 'pay' ? (e.est ? 'chip-pay-est' : 'chip-pay') : `chip-${e.type}`;
 
       if (e.type !== 'pay') {
-        return `<span class="cal-chip ${chipClass}" title="Ex-date · ${e.symbol}">${e.symbol}</span>`;
+        return `<span class="cal-chip ${chipClass}" onclick="openSymbolModal('${e.symbol}')" style="cursor:pointer" title="Ex-date · ${e.symbol}">${e.symbol}</span>`;
       }
 
       // Build delta indicator (per-share comparison)
@@ -337,7 +337,7 @@ function renderCalendar() {
       const amtStr  = e.amount ? ` ${fmt$(e.amount)}` : '';
       const label   = `${e.symbol}${amtStr}${deltaHtml}`;
       const title   = `${e.est ? 'Estimated pay' : 'Pay'}-date · ${e.symbol}${titleExtra}`;
-      return `<span class="cal-chip ${chipClass}" title="${title}">${label}</span>`;
+      return `<span class="cal-chip ${chipClass}" onclick="openSymbolModal('${e.symbol}')" style="cursor:pointer" title="${title}">${label}</span>`;
     }).join('');
   }
 
@@ -471,18 +471,20 @@ function actionBtns(symbol) {
 function renderRow({ symbol, costBasis, shares }) {
   const data = S.data[symbol], loading = S.loading[symbol], err = S.errors[symbol];
 
+  const badgeHtml = `<span class="badge" onclick="openSymbolModal('${symbol}')" style="cursor:pointer" title="View history">${symbol}</span>`;
+
   if (loading) return `<tr>
-    <td><span class="badge">${symbol}</span></td>
+    <td>${badgeHtml}</td>
     <td colspan="13" class="cell-loading"><span class="spinner"></span>Loading…</td>
     <td>${actionBtns(symbol)}</td></tr>`;
 
   if (err) return `<tr>
-    <td><span class="badge">${symbol}</span></td>
+    <td>${badgeHtml}</td>
     <td colspan="13" class="cell-error">Error: ${esc(err)}</td>
     <td>${actionBtns(symbol)}</td></tr>`;
 
   if (!data) return `<tr>
-    <td><span class="badge">${symbol}</span></td>
+    <td>${badgeHtml}</td>
     <td colspan="13" style="color:var(--dim)">—</td>
     <td>${actionBtns(symbol)}</td></tr>`;
 
@@ -628,6 +630,158 @@ function renderChart() {
       <div class="bar-lbl">${CAL_MONTHS_SHORT[m.month]}</div>
     </div>`;
   }).join('');
+}
+
+// ── Symbol detail modal ────────────────────────────────────────────
+function projectFutureDates(d, count = 4) {
+  if (!d.exDividendDate || !d.frequency) return [];
+  const intervalDays = Math.round(365 / d.frequency);
+  const payOffset = (d.dividendDate && d.exDividendDate)
+    ? Math.round((new Date(d.dividendDate + 'T12:00:00Z') - new Date(d.exDividendDate + 'T12:00:00Z')) / 86400000)
+    : null;
+  const results = [];
+  let next = new Date(d.exDividendDate + 'T12:00:00Z');
+  for (let i = 0; i < count; i++) {
+    const exDate = next.toISOString().split('T')[0];
+    const payDate = payOffset != null
+      ? new Date(next.getTime() + payOffset * 86400000).toISOString().split('T')[0]
+      : null;
+    results.push({ exDate, payDate, amount: d.distributionAmount, est: i === 0 ? d.isEstimated : true });
+    next = new Date(next.getTime() + intervalDays * 86400000);
+  }
+  return results;
+}
+
+function openSymbolModal(symbol) {
+  const d = S.data[symbol];
+  const t = S.tickers.find(t => t.symbol === symbol);
+  document.getElementById('sym-modal-title').textContent = d?.name ? `${symbol} — ${d.name}` : symbol;
+  const body = document.getElementById('sym-modal-body');
+
+  if (!d) {
+    body.innerHTML = '<p style="color:var(--muted);padding:16px 18px">No data loaded for this symbol yet.</p>';
+    document.getElementById('symbol-modal').classList.remove('hidden');
+    return;
+  }
+
+  const yoc = (t?.costBasis && d.annualDividendRate) ? d.annualDividendRate / t.costBasis * 100 : null;
+  const yop = (d.currentPrice && d.annualDividendRate) ? d.annualDividendRate / d.currentPrice * 100 : null;
+
+  const statsHtml = `<div class="sym-stats">
+    ${d.currentPrice ? `<span class="sym-stat">Price <strong>${fmt$(d.currentPrice)}</strong></span>` : ''}
+    ${d.frequency ? `<span class="sym-stat">Freq <strong>${freqLabel(d.frequency)}</strong></span>` : ''}
+    ${d.annualDividendRate ? `<span class="sym-stat">Ann. Rate <strong>${fmt$(d.annualDividendRate, 4)}</strong></span>` : ''}
+    ${yop != null ? `<span class="sym-stat">Yield / Price <strong>${fmtPct(yop)}</strong></span>` : ''}
+    ${yoc != null ? `<span class="sym-stat">Yield / Cost <strong class="hi">${fmtPct(yoc)}</strong></span>` : ''}
+    ${t?.costBasis ? `<span class="sym-stat">Cost / sh <strong>${fmt$(t.costBasis)}</strong></span>` : ''}
+    ${t?.shares ? `<span class="sym-stat">Shares <strong>${fmtN(t.shares)}</strong></span>` : ''}
+  </div>`;
+
+  // Bar chart: history (oldest→newest) + future projections
+  const histOldFirst = [...(d.history || [])].reverse();
+  const futures = projectFutureDates(d, 4);
+  const allBars = [
+    ...histOldFirst.map(h => ({ date: h.date, amount: h.amount, est: false })),
+    ...futures.map(f => ({ date: f.exDate, amount: f.amount, est: true }))
+  ];
+
+  let chartHtml = '';
+  if (allBars.length > 0) {
+    const amounts = allBars.map(b => b.amount).filter(a => a > 0);
+    const maxAmt  = amounts.length ? Math.max(...amounts) : 0.01;
+    const minAmt  = amounts.length ? Math.min(...amounts) : 0;
+    const floor   = minAmt > 0 ? minAmt * 0.8 : 0;
+    const range   = maxAmt - floor || 0.01;
+    const BAR_H   = 80;
+    // Show label every N bars so we get ~6-8 visible labels
+    const n = allBars.length;
+    const step = n <= 6 ? 1 : n <= 12 ? 2 : n <= 20 ? 3 : 4;
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    chartHtml = `<div class="sym-section">
+      <div class="sym-section-lbl">Distribution / Share — last ${histOldFirst.length} + ${futures.length} projected</div>
+      <div class="hist-chart">
+        ${allBars.map((b, i) => {
+          const h   = b.amount > 0 ? Math.max(Math.round((b.amount - floor) / range * BAR_H), 2) : 0;
+          const dt  = new Date(b.date + 'T12:00:00Z');
+          const lbl = (i % step === 0 || i === allBars.length - 1)
+            ? `${MON[dt.getUTCMonth()]} '${String(dt.getUTCFullYear()).slice(2)}`
+            : '';
+          const tip = `${b.est ? 'Projected' : 'Actual'} ex-date: ${b.date}\nDist/sh: ${fmt$(b.amount, 4)}`;
+          return `<div class="hist-bar-col${b.est ? ' hbc-future' : ''}" title="${tip}">
+            <div class="hbc-spacer"></div>
+            <div class="hist-bar" style="height:${h}px"></div>
+            <div class="hist-bar-lbl">${lbl}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Table: upcoming first, then past (newest→oldest)
+  const histNewFirst = d.history || [];
+  const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const shortDate = iso => {
+    if (!iso) return '—';
+    const dt = new Date(iso + 'T12:00:00Z');
+    return `${MONS[dt.getUTCMonth()]} ${dt.getUTCDate()}, ${dt.getUTCFullYear()}`;
+  };
+
+  let rows = '';
+  // Upcoming / projected rows — reversed so furthest future is at top, nearest just above the divider
+  for (const f of [...futures].reverse()) {
+    const estBadge = f.est
+      ? `<span style="font-size:10px;color:var(--purple);font-weight:600;font-family:var(--font)">est</span>`
+      : `<span style="font-size:10px;color:var(--blue);font-weight:600;font-family:var(--font)">confirmed</span>`;
+    rows += `<tr class="est-row">
+      <td>${shortDate(f.exDate)}</td>
+      <td>${shortDate(f.payDate)}</td>
+      <td style="text-align:right">${fmt$(f.amount, 4)}</td>
+      <td style="text-align:right">—</td>
+      <td class="label">${estBadge}</td>
+    </tr>`;
+  }
+
+  if (futures.length && histNewFirst.length) {
+    rows += `<tr class="divider"><td colspan="5">Past distributions (newest first)</td></tr>`;
+  }
+
+  // Past history rows
+  for (let i = 0; i < histNewFirst.length; i++) {
+    const h = histNewFirst[i], prev = histNewFirst[i + 1];
+    let delta = '<span style="color:var(--dim)">—</span>';
+    if (h.amount && prev?.amount) {
+      const pct = (h.amount - prev.amount) / prev.amount * 100;
+      if (Math.abs(pct) >= 0.1) {
+        const up = pct > 0;
+        delta = `<span style="color:${up ? 'var(--green-hi)' : 'var(--red)'}">${up ? '+' : ''}${pct.toFixed(1)}%</span>`;
+      }
+    }
+    rows += `<tr>
+      <td>${shortDate(h.date)}</td>
+      <td style="color:var(--muted)">${shortDate(h.payDate)}</td>
+      <td style="text-align:right">${fmt$(h.amount, 4)}</td>
+      <td style="text-align:right">${delta}</td>
+      <td></td>
+    </tr>`;
+  }
+
+  if (!rows) rows = `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px 18px;font-family:var(--font)">No distribution history available</td></tr>`;
+
+  const tableHtml = `<table class="hist-table">
+    <thead><tr>
+      <th>Ex-Date</th><th>Pay Date</th>
+      <th class="r">$ / Share</th><th class="r">Δ vs Prior</th><th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  body.innerHTML = statsHtml + chartHtml + `<div style="padding-top:14px">${tableHtml}</div>`;
+  document.getElementById('symbol-modal').classList.remove('hidden');
+}
+
+function closeSymbolModal() {
+  document.getElementById('symbol-modal').classList.add('hidden');
 }
 
 // ── Render ─────────────────────────────────────────────────────────
@@ -794,7 +948,7 @@ async function startApp() {
   render();
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeEditModal();
+    if (e.key === 'Escape') { closeEditModal(); closeSymbolModal(); }
   });
 
   const chartTip = document.getElementById('chart-tip');
