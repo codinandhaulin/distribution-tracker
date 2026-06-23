@@ -1011,6 +1011,9 @@ async function startApp() {
     await Promise.all(S.tickers.map(t => fetchTicker(t.symbol)));
     setStatus('Updated ' + new Date().toLocaleTimeString());
   }
+
+  // Auto-refresh every 12 hours — matches the server-side cache TTL
+  setInterval(refreshAll, 12 * 60 * 60 * 1000);
 }
 
 async function init() {
