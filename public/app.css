@@ -447,9 +447,41 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
   border-bottom: 1px solid var(--border);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
+  /* Header */
+  .header-inner { padding: 6px 10px; height: auto; min-height: 48px; flex-wrap: wrap; gap: 6px; }
+  .brand h1 { display: none; }
+  .header-right { gap: 6px; flex-wrap: wrap; }
+  .btn-label { display: none; }
+  #last-updated { font-size: 11px; }
+
+  /* Main */
+  main { padding: 10px 10px 60px; }
+
+  /* Summary strip */
+  .summary-strip { gap: 6px; }
+  .stat { padding: 8px 10px; }
+  .stat-value { font-size: 18px; }
+
+  /* Hide bar chart — too narrow to be useful */
+  #chart-card { display: none; }
+
+  /* Calendar — drop week-total column, shrink cells and chips */
+  .cal-week-total, .cal-dow-week { display: none; }
+  .cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .cal-cell { min-height: 52px; padding: 2px 2px; }
+  .cal-chip { font-size: 8px; padding: 1px 2px; border-radius: 2px; }
+  .cal-day-num { font-size: 10px; }
+  .cal-day-total { font-size: 9px; }
+  .cal-legend { gap: 8px; font-size: 11px; }
+  .cal-today-btn { font-size: 11px; padding: 3px 7px; }
+
+  /* Add / Import card */
   .add-form { flex-direction: column; align-items: stretch; }
   .field input, #inp-symbol, #inp-shares { width: 100%; }
-  .cal-chip { font-size: 9px; padding: 1px 3px; }
-  .cal-cell { min-height: 56px; padding: 3px 4px; }
+
+  /* Ticker detail modal */
+  #sym-modal-body { overflow-x: auto; }
+  .hist-table th, .hist-table td { padding: 5px 8px; }
+  .sym-stats { padding: 8px 10px; gap: 10px; }
 }
