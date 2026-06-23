@@ -23,11 +23,47 @@ Uses **Polygon.io** for price and dividend data. The free "Basic" plan is suffic
 
 ## Architecture
 
-- `server.js` — Express server, proxies Polygon API calls, exposes `/api/ticker/:symbol` and `/api/config`
-- `public/index.html` — entire frontend (vanilla JS, no bundler)
-- Ticker list + cost basis persisted in `localStorage` under key `dt2_tickers`
-- Fetched API data cached in `localStorage` under key `dt2_cache` (12-hour TTL)
-- Server also keeps an in-memory cache (4-hour TTL) to reduce Polygon calls within a session
+- `server.js` — Express server, SQLite storage, JWT auth, server-side Polygon queue
+- `public/index.html` — HTML shell only (no inline CSS or JS)
+- `public/app.css` — all styles (~380 lines)
+- `public/app.js` — all client JS (~500 lines, vanilla, no bundler)
+- Portfolio + cache stored in `data/app.db` (SQLite via `node:sqlite`)
+- No `localStorage` usage for app data (fully server-side)
+
+## File layout
+
+```
+server.js          Express + SQLite + auth + Polygon queue
+public/
+  index.html       HTML shell, links app.css + app.js
+  app.css          All styles (extracted from old monolithic HTML)
+  app.js           All frontend JS (extracted from old monolithic HTML)
+data/
+  app.db           SQLite DB (WAL mode): users, portfolios, ticker_cache
+  *.json.migrated  Renamed JSON files after one-time migration to SQLite
+```
+
+## Dependencies
+
+- `express` — HTTP server
+- `bcryptjs` — password hashing (pure JS, no native compilation)
+- `jsonwebtoken` — JWT session tokens
+- `node:sqlite` — built-in SQLite (Node 24+, no npm package needed)
+
+## Auth
+
+- `USERS=martin:password,bob:other` in `.env` → users seeded into SQLite on startup (bcrypt-hashed)
+- JWT sessions: `dt_tok` cookie, 7-day TTL, signed with `JWT_SECRET`
+- If `USERS` is empty, auth is disabled and a single "default" user is used (good for local dev)
+- `JWT_SECRET` in `.env` — if missing, a random secret is generated each restart (sessions reset)
+
+## SQLite schema
+
+```sql
+users         (username PK, password_hash)
+portfolios    (username PK, tickers TEXT)   -- JSON array of {symbol, costBasis, shares}
+ticker_cache  (symbol PK, data TEXT, ts INTEGER)  -- 12h TTL
+```
 
 ## Polygon endpoints used
 
@@ -43,17 +79,21 @@ Dividend and ticker-ref calls use `.catch(() => null)` — price will still show
 
 Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch makes 3 Polygon calls in parallel, so:
 
-- `batchFetch()` in the client enforces a **30-second gap** between tickers that need a real API call
-- Cache hits are served instantly with no delay
+- **Server-side Polygon queue** (`polyEnqueue` / `drainPolyQueue` in `server.js`) serialises all Polygon calls across every connected browser — 30-second spacing between uncached fetches
+- Cache hits (SQLite, 12h TTL) bypass the queue and return immediately
 - The server retries a single 429 after a 65-second wait before propagating the error
-- Initial import of a large portfolio (38 tickers) takes ~19 minutes on first load; all subsequent loads are instant from cache
-- **Refresh All** button only re-fetches tickers whose cache entry is stale (>12h old)
+- Initial import of a large portfolio (38 tickers) takes ~19 minutes on first cold load; all subsequent loads are instant from cache
+- **Refresh All** button only re-fetches tickers whose cache entry is stale (>12h old) — safe to click anytime
+- Client-side `batchFetch()` is sequential (no explicit delay) — server response time is the natural pacing
+- Page-load uses `Promise.all` (parallel requests) — cache hits all return instantly; queue handles any cold tickers
 
 ## Key decisions
 
 - **Polygon over FMP**: FMP's free tier no longer covers basic quote or dividend endpoints (403/402).
 - **Prev-close not real-time**: Polygon's real-time snapshot endpoint requires a paid plan. Prev-close is fine for a distribution tracker.
-- **No database**: tickers + cost basis live in `localStorage`. The server is stateless.
+- **node:sqlite over better-sqlite3**: Node 24's built-in sqlite module has the same synchronous API, zero native compilation needed. better-sqlite3 v9 requires C++20 which the macOS CommandLineTools Clang doesn't support by default.
+- **JWT over in-memory sessions**: Stateless — sessions survive container restarts as long as JWT_SECRET is stable. Cookie name: `dt_tok`.
+- **bcryptjs over bcrypt**: Pure JS, no native module compilation, slightly slower but imperceptible for login.
 - **Frequency from API**: Polygon returns a `frequency` field directly (1/2/4/12). If no dividend records are returned, `frequency` is `null` — never defaulted to 4 (Quarterly) to avoid misleading badges.
 - **Dual-source calendar**: actual Polygon history for past ex/pay dates; forward projection for future dates using `occurrencesInMonth()` based on frequency interval.
 - **Estimated vs confirmed**: future projected pay dates get `est: true` flag and render as grey/italic chips; confirmed past pay dates render as solid green.
@@ -70,7 +110,8 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 ### 12-Month Payout Forecast chart
 - Vertical bar chart card between the summary strip and the table/calendar
 - Computes projected pay dates for each ticker for the next 12 months using `occurrencesInMonth()` + pay-date offset
-- Bars scaled to the highest month; current month highlighted; abbreviated `$1.2k` labels above each bar
+- Bars scaled against range (max − 80%×min floor) so month-to-month differences are visible
+- Current month highlighted; next-year months styled blue with rotated year label on first bar
 - Annual total shown in chart header
 - Hover tooltip shows per-ticker breakdown for that month, sorted by amount descending
 - `computeMonthlyProjections()` attributes amounts to the **pay-date month** (not ex-date month)
@@ -82,11 +123,15 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Chip colors: red = declared ex-date, purple = estimated ex-date, green = confirmed pay date, grey/italic = estimated pay date
 - Weekly subtotals and monthly total shown
 - Pay chips show inline delta vs prior distribution: `▲6.2%` (green) or `▼3.1%` (red) when a prior exists; tooltip shows per-share dollar detail ("Prev: $0.48/sh → $0.51/sh (+6.2%)")
+- Today's date number rendered as blue filled circle
+- Same-symbol pay events on same date merged (`addEv()` sums amounts and perShare)
+- Daily payout total shown top-right of each cell in green mono
 
 ### Add / Import card
 - Collapsible — auto-collapsed on load when portfolio exists, auto-expanded when empty
 - Manual add: symbol + cost basis + shares
 - CSV import: auto-detects Fidelity format (`Average Cost Basis` = per-share, `Cost Basis Total` = total)
+- Default CSV mode = **merge** (update existing symbols, add new ones, leave others untouched); "Replace all" checkbox for full replace
 - Duplicate symbols across CSV rows (e.g. margin + cash accounts) are merged: shares summed, cost basis weighted-averaged
 - Mutual funds without exchange listings (e.g. FNILX) are not found by Polygon and will show an error — remove them manually
 

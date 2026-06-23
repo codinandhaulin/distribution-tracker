@@ -7,6 +7,7 @@ services:
     environment:
       - POLYGON_KEY=${POLYGON_KEY}
       - USERS=${USERS}
+      - JWT_SECRET=${JWT_SECRET}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
