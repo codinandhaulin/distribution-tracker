@@ -889,7 +889,17 @@ function renderCalendar() {
   const events = {};
   const addEv = (date, symbol, type, amount, est = false, perShare = null, prevPerShare = null) => {
     if (!date) return;
-    (events[date] ??= []).push({ symbol, type, amount, est, perShare, prevPerShare });
+    (events[date] ??= []);
+    if (type === 'pay') {
+      // Merge same-symbol pay events on the same date (e.g. regular + supplemental dividend)
+      const ex = events[date].find(e => e.symbol === symbol && e.type === 'pay');
+      if (ex) {
+        if (amount)   ex.amount   = (ex.amount   ?? 0) + amount;
+        if (perShare) ex.perShare = (ex.perShare ?? 0) + perShare;
+        return;
+      }
+    }
+    events[date].push({ symbol, type, amount, est, perShare, prevPerShare });
   };
   const calNow   = new Date();
   const todayStr = `${calNow.getFullYear()}-${String(calNow.getMonth()+1).padStart(2,'0')}-${String(calNow.getDate()).padStart(2,'0')}`;
