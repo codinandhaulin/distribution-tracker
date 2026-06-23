@@ -511,7 +511,7 @@
                  onkeydown="if(event.key==='Enter') addTicker()">
         </div>
         <button class="btn btn-green" onclick="addTicker()">+ Add</button>
-        <div style="display:flex;align-items:flex-end">
+        <div style="display:flex;align-items:center;gap:10px">
           <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="handleCSVFile(this)">
           <button class="btn" onclick="document.getElementById('csv-input').click()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -519,6 +519,9 @@
             </svg>
             Import CSV
           </button>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="csv-replace-all"> Replace all
+          </label>
         </div>
       </div>
     </div>
@@ -1415,13 +1418,37 @@ async function handleCSVFile(input) {
 
   if (!imported.length) { toast('No valid positions found — check CSV format.', true); return; }
 
-  S.tickers = imported;
-  S.data = {}; S.loading = {}; S.errors = {};
-  persist();
-  render();
-  toast(`Imported ${imported.length} ticker${imported.length !== 1 ? 's' : ''} — fetching data in batches…`);
+  const replaceAll = document.getElementById('csv-replace-all').checked;
 
-  await batchFetch(S.tickers);
+  if (replaceAll) {
+    S.tickers = imported;
+    S.data = {}; S.loading = {}; S.errors = {};
+    persist();
+    render();
+    toast(`Replaced portfolio with ${imported.length} ticker${imported.length !== 1 ? 's' : ''} — fetching data…`);
+    await batchFetch(S.tickers);
+  } else {
+    // Merge: update existing positions, add new ones; leave untouched tickers alone
+    const newSymbols = [];
+    for (const p of imported) {
+      const idx = S.tickers.findIndex(t => t.symbol === p.symbol);
+      if (idx >= 0) {
+        S.tickers[idx] = p; // update shares + cost basis
+      } else {
+        S.tickers.push(p);
+        newSymbols.push(p.symbol);
+      }
+    }
+    persist();
+    render();
+    const updatedCount = imported.length - newSymbols.length;
+    const parts = [];
+    if (updatedCount > 0) parts.push(`updated ${updatedCount}`);
+    if (newSymbols.length > 0) parts.push(`added ${newSymbols.length} new`);
+    toast(`CSV import: ${parts.join(', ')}${newSymbols.length ? ' — fetching new tickers…' : ''}`);
+    if (newSymbols.length) await batchFetch(newSymbols.map(s => ({ symbol: s })));
+  }
+
   document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
