@@ -11,6 +11,14 @@ let calYear    = new Date().getFullYear();
 let calMonth   = new Date().getMonth(); // 0-indexed
 let _editSym   = null;
 let currentUser = null;
+let _statusTimer = null;
+
+function setStatus(text, loading = false) {
+  const el = document.getElementById('last-updated');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('status-loading', loading);
+}
 
 // ── Auth ───────────────────────────────────────────────────────────
 async function login() {
@@ -79,9 +87,18 @@ const freqLabel = f => FREQ_LABEL[f] || `×${f}/yr`;
 // Client just awaits the response; cache hits return immediately,
 // uncached tickers are spaced 30s apart by the server queue.
 
-async function fetchTicker(symbol, force = false) {
+async function fetchTicker(symbol, force = false, progress = '') {
   S.loading[symbol] = true; S.errors[symbol] = null;
   render();
+  clearInterval(_statusTimer);
+  let secs = 0;
+  const QUEUE_INTERVAL = 30;
+  const label = () => {
+    const remaining = Math.max(0, QUEUE_INTERVAL - secs);
+    return `⟳ Fetching ${symbol}${progress ? ' ' + progress : ''} · next in ~${remaining}s`;
+  };
+  setStatus(label(), true);
+  _statusTimer = setInterval(() => { secs++; setStatus(label(), true); }, 1000);
   try {
     const url = `/api/ticker/${encodeURIComponent(symbol)}${force ? '?force=1' : ''}`;
     const r = await fetch(url);
@@ -93,6 +110,7 @@ async function fetchTicker(symbol, force = false) {
     S.data[symbol] = null;
     S.errors[symbol] = e.message;
   }
+  clearInterval(_statusTimer);
   S.loading[symbol] = false;
   render();
 }
@@ -131,7 +149,6 @@ async function refreshAll() {
   btn.disabled = true;
   await batchFetch(S.tickers);
   btn.disabled = false;
-  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
 // ── Edit modal ─────────────────────────────────────────────────────
@@ -820,11 +837,10 @@ function esc(s) { return String(s||'').replace(/[&<>"']/g, c =>
 // Server-side queue paces Polygon calls, so no explicit delay needed here.
 // Sequential awaits let the server queue do its job and give us a progress counter.
 async function batchFetch(tickers, force = false) {
-  const el = document.getElementById('last-updated');
   for (let i = 0; i < tickers.length; i++) {
-    if (el) el.textContent = `Loading ${i + 1} of ${tickers.length}…`;
-    await fetchTicker(tickers[i].symbol, force);
+    await fetchTicker(tickers[i].symbol, force, `(${i + 1}/${tickers.length})`);
   }
+  setStatus('Updated ' + new Date().toLocaleTimeString());
 }
 
 // ── CSV Import ─────────────────────────────────────────────────────
@@ -936,9 +952,8 @@ async function handleCSVFile(input) {
     if (newSymbols.length > 0) parts.push(`added ${newSymbols.length} new`);
     toast(`CSV import: ${parts.join(', ')}${newSymbols.length ? ' — fetching new tickers…' : ''}`);
     if (newSymbols.length) await batchFetch(newSymbols.map(s => ({ symbol: s })));
+    else setStatus('Updated ' + new Date().toLocaleTimeString());
   }
-
-  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
 // ── Init ───────────────────────────────────────────────────────────
@@ -994,7 +1009,7 @@ async function startApp() {
     // Parallel on page load — server cache returns all warm hits immediately.
     // batchFetch (sequential) is reserved for Refresh All and CSV import.
     await Promise.all(S.tickers.map(t => fetchTicker(t.symbol)));
-    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    setStatus('Updated ' + new Date().toLocaleTimeString());
   }
 }
 
