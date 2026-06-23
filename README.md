@@ -79,6 +79,37 @@ The SQLite database is stored in `./data/app.db` on the host (mounted into the c
 
 Set a stable `JWT_SECRET` in `.env`. If it's missing, a random one is generated each startup and all sessions are invalidated on restart.
 
+## Publishing and pulling a pre-built image
+
+To run on another machine without building from source, publish the image to a registry first.
+
+**Docker Hub** (1 free private repo):
+```bash
+docker build -t yourusername/distribution-tracker .
+docker push yourusername/distribution-tracker
+```
+
+**GitHub Container Registry** (free, tied to your GitHub account):
+
+Create a GitHub PAT at **Settings → Developer settings → Personal access tokens → Tokens (classic)** with scopes: `write:packages`, `read:packages`, `delete:packages`.
+
+```bash
+echo YOUR_GITHUB_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+docker build -t ghcr.io/codinandhaulin/distribution-tracker .
+docker push ghcr.io/codinandhaulin/distribution-tracker
+```
+
+**On the destination machine:**
+
+1. Create `.env` with your keys (see Setup above — the image does not contain secrets)
+2. Copy `docker-compose.yml` to the same folder
+3. Pull and start:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
 ---
 
 ## Notes
