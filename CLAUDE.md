@@ -171,7 +171,7 @@ npm test   # runs test/logic.test.js via node:test (built-in, no extra install)
 
 **How Martin likes to work:**
 - Keep solutions simple — this is a personal tool, not a production codebase. Prefer editing existing functions over adding new abstraction layers. Three similar lines beats a premature helper.
-- Update CLAUDE.md continuously after every meaningful change, not just at end of session.
+- Update CLAUDE.md **and README.md** continuously after every meaningful change, not just at end of session.
 - If Martin says "respond with TEXT ONLY and not call any tools" — obey literally, no tool calls for that response. He uses this during sensitive operations (e.g. mid-import when 429 errors are flying).
 - When proposing UI changes, give 2–3 concrete options with a clear recommendation before building. Martin will say "yes" or redirect.
 
