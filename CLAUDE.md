@@ -7,6 +7,7 @@ A single-page web app for tracking upcoming brokerage dividend distributions. Bu
 ```bash
 npm run dev   # auto-restarts on file changes (preferred while developing)
 npm start     # production
+npm test      # run unit tests (node:test, no install needed)
 ```
 
 Then open http://localhost:3000.
@@ -38,6 +39,8 @@ public/
   index.html       HTML shell, links app.css + app.js
   app.css          All styles (extracted from old monolithic HTML)
   app.js           All frontend JS (extracted from old monolithic HTML)
+test/
+  logic.test.js    Unit tests for pure-logic functions (node:test, no npm install)
 data/
   app.db           SQLite DB (WAL mode): users, portfolios, ticker_cache
   *.json.migrated  Renamed JSON files after one-time migration to SQLite
@@ -134,6 +137,25 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Default CSV mode = **merge** (update existing tickers, add new ones, leave others untouched); "Replace all" checkbox for full replace
 - Duplicate tickers across CSV rows (e.g. margin + cash accounts) are merged: shares summed, cost basis weighted-averaged
 - Mutual funds without exchange listings (e.g. FNILX) are not found by Polygon and will show an error — remove them manually
+
+## Tests
+
+```bash
+npm test   # runs test/logic.test.js via node:test (built-in, no extra install)
+```
+
+69 tests across 6 suites covering the highest-risk pure-logic functions:
+
+| Suite | What it covers |
+|-------|---------------|
+| `occurrencesInMonth` | Monthly/weekly/quarterly/annual funds; anchor-in-future rewind; zero-hit months |
+| `projectFutureDates` | Date spacing, pay-offset, `isEstimated` propagation, null frequency/ex-date |
+| `parseCSVRow` | Quoted commas, dollar amounts with commas, whitespace trimming, empty fields |
+| `parseNum` | `$1,234.56` → `1234.56`, dashes → null, empty/null input |
+| `mergePositions` | Weighted-average cost basis across duplicate ticker rows (Fidelity margin+cash lots) |
+| CSV header detection | Fidelity column-name regexes for symbol, per-share cost, total cost, skip rows |
+
+**Important:** the test file inlines copies of the functions from `public/app.js` (browser globals can't be imported). When you change a logic function in `app.js`, update the matching copy in `test/logic.test.js` too.
 
 ## Known limitations
 
