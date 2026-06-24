@@ -9,7 +9,7 @@
     "dev": "node --watch server.js",
     "test": "node --test test/logic.test.js",
     "lint": "eslint .",
-    "prepare": "husky"
+    "prepare": "node -e \"if (process.env.CI || process.env.NODE_ENV === 'production') process.exit(0); require('husky').install()\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
