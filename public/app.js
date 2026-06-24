@@ -832,7 +832,7 @@ function openDayModal(dateStr) {
       : (ev.type === 'est' ? 'var(--purple)' : 'var(--red)');
     const typeLabel = isPay ? 'PAY' : 'EX';
     const amt = isPay && ev.amount ? fmt$(ev.amount) : ev.perShare ? `${fmt$(ev.perShare, 4)}/sh` : '';
-    const estBadge = ev.est ? `<span class="day-modal-est">est</span>` : '';
+    const estBadge = ev.est ? `<span class="day-modal-est" style="color:${typeColor}">est</span>` : '';
 
     let deltaHtml = '', titleExtra = '';
     if (isPay && ev.perShare != null && ev.prevPerShare != null && ev.prevPerShare !== 0) {
@@ -852,7 +852,7 @@ function openDayModal(dateStr) {
     return `<div class="day-modal-row" onclick="openSymbolModal('${ev.symbol}')" title="${title}">
       <span class="badge">${ev.symbol}</span>
       <span class="day-modal-type" style="color:${typeColor}">${typeLabel}</span>
-      <span class="day-modal-amt">${amt}${estBadge}${deltaHtml}</span>
+      <span class="day-modal-amt" style="color:${typeColor}">${amt}${estBadge}${deltaHtml}</span>
     </div>`;
   }).join('');
 
