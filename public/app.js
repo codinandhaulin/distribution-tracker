@@ -491,7 +491,7 @@ const ICON_REFRESH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none
 const ICON_X = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
 
 function actionBtns(symbol) {
-  return `<div class="actions">
+  return `<div class="actions" onclick="event.stopPropagation()">
     <button class="btn-icon" onclick="openEditModal('${symbol}')" title="Edit">${ICON_EDIT}</button>
     <button class="btn-icon" onclick="fetchTicker('${symbol}')" title="Refresh">${ICON_REFRESH}</button>
     <button class="btn-icon danger" onclick="removeTicker('${symbol}')" title="Remove">${ICON_X}</button>
@@ -501,19 +501,19 @@ function actionBtns(symbol) {
 function renderRow({ symbol, costBasis, shares }) {
   const data = S.data[symbol], loading = S.loading[symbol], err = S.errors[symbol];
 
-  const badgeHtml = `<span class="badge" onclick="openSymbolModal('${symbol}')" style="cursor:pointer" title="View history">${symbol}</span>`;
+  const badgeHtml = `<span class="badge">${symbol}</span>`;
 
-  if (loading) return `<tr>
+  if (loading) return `<tr data-symbol="${symbol}">
     <td>${badgeHtml}</td>
     <td colspan="13" class="cell-loading"><span class="spinner"></span>Loading…</td>
     <td>${actionBtns(symbol)}</td></tr>`;
 
-  if (err) return `<tr>
+  if (err) return `<tr data-symbol="${symbol}">
     <td>${badgeHtml}</td>
     <td colspan="13" class="cell-error">Error: ${esc(err)}</td>
     <td>${actionBtns(symbol)}</td></tr>`;
 
-  if (!data) return `<tr>
+  if (!data) return `<tr data-symbol="${symbol}">
     <td>${badgeHtml}</td>
     <td colspan="13" style="color:var(--dim)">—</td>
     <td>${actionBtns(symbol)}</td></tr>`;
@@ -545,7 +545,7 @@ function renderRow({ symbol, costBasis, shares }) {
   const estPay    = shares && distAmt ? shares * distAmt : null;
   const annPayout = shares && annRate ? shares * annRate : null;
 
-  return `<tr>
+  return `<tr data-symbol="${symbol}">
     <td><span class="badge">${symbol}</span></td>
     <td><span class="co-name" title="${esc(data.name)}">${esc(data.name)}</span></td>
     <td class="r mono">${fmt$(price)}</td>
@@ -1086,6 +1086,13 @@ async function startApp() {
     if (sortCol === col) sortDir *= -1;
     else { sortCol = col; sortDir = 1; }
     render();
+  });
+
+  document.getElementById('tbody').addEventListener('click', e => {
+    if (e.target.closest('.actions')) return;
+    const row = e.target.closest('tr[data-symbol]');
+    if (!row) return;
+    openSymbolModal(row.dataset.symbol);
   });
 
   try {

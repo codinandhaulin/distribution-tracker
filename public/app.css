@@ -170,6 +170,7 @@ td {
   vertical-align: middle; overflow: hidden;
 }
 tbody tr:last-child td { border-bottom: none; }
+tbody tr[data-symbol] { cursor: pointer; }
 tbody tr:hover td { background: rgba(33,38,45,.5); }
 
 .badge {
