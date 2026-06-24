@@ -134,15 +134,21 @@ main { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; display: flex
 
 /* ── Summary strip ── */
 .summary-strip {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 1px; background: var(--border); border: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border);
   border-radius: 10px; overflow: hidden;
 }
+.summary-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1px; background: var(--border);
+}
+.summary-row--portfolio { border-top: 1px solid var(--border); }
 .stat { background: var(--surface); padding: 12px 16px; }
 .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
 .stat-value { font-size: 20px; font-weight: 600; font-family: var(--mono); color: var(--text); }
 .stat-value.green  { color: var(--green-hi); }
 .stat-value.amber  { color: var(--amber-hi); }
+.stat-value.loss   { color: var(--red); }
 
 /* ── Table ── */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }

@@ -588,12 +588,35 @@ function renderSummary() {
     hasAnnual = true;
   }
 
+  let mktVal = 0, hasMktVal = false;
+  let totalCost = 0, hasCost = false;
+  for (const { symbol, costBasis, shares } of S.tickers) {
+    const d = S.data[symbol];
+    if (shares != null && d?.currentPrice) { mktVal    += shares * d.currentPrice; hasMktVal = true; }
+    if (shares != null && costBasis)       { totalCost += shares * costBasis;       hasCost   = true; }
+  }
+
   document.getElementById('s-count').textContent  = count;
   document.getElementById('s-urgent').textContent  = urgent;
   document.getElementById('s-payout').textContent  = payout30 > 0 ? fmt$(payout30) : '—';
   document.getElementById('s-yoc').textContent     = yocN ? fmtPct(yocSum / yocN) : '—';
   document.getElementById('s-yop').textContent     = yopN ? fmtPct(yopSum / yopN) : '—';
   document.getElementById('s-annual').textContent  = hasAnnual ? fmt$(annualTotal) : '—';
+
+  document.getElementById('s-mktval').textContent = hasMktVal ? fmt$(mktVal) : '—';
+  document.getElementById('s-cost').textContent   = hasCost   ? fmt$(totalCost) : '—';
+
+  const gainEl = document.getElementById('s-gain');
+  if (hasMktVal && hasCost) {
+    const gain = mktVal - totalCost;
+    const gainPct = totalCost > 0 ? (gain / totalCost) * 100 : null;
+    const sign = gain >= 0 ? '+' : '';
+    gainEl.textContent = fmt$(gain) + (gainPct != null ? ` (${sign}${gainPct.toFixed(2)}%)` : '');
+    gainEl.className = 'stat-value ' + (gain >= 0 ? 'green' : 'loss');
+  } else {
+    gainEl.textContent = '—';
+    gainEl.className = 'stat-value';
+  }
 }
 
 // ── 12-month payout chart ──────────────────────────────────────────

@@ -126,29 +126,45 @@
 
   <!-- Summary strip -->
   <div class="summary-strip hidden" id="summary-strip">
-    <div class="stat">
-      <div class="stat-label">Tickers</div>
-      <div class="stat-value" id="s-count">—</div>
+    <div class="summary-row summary-row--top">
+      <div class="stat">
+        <div class="stat-label">Tickers</div>
+        <div class="stat-value" id="s-count">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Ex-Dates ≤ 7 Days</div>
+        <div class="stat-value amber" id="s-urgent">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Payout Due ≤ 30 Days</div>
+        <div class="stat-value" id="s-payout">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Avg Yield on Cost</div>
+        <div class="stat-value green" id="s-yoc">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Avg Yield on Price</div>
+        <div class="stat-value" id="s-yop">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Est. Annual Total</div>
+        <div class="stat-value green" id="s-annual">—</div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Ex-Dates ≤ 7 Days</div>
-      <div class="stat-value amber" id="s-urgent">—</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Payout Due ≤ 30 Days</div>
-      <div class="stat-value" id="s-payout">—</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Avg Yield on Cost</div>
-      <div class="stat-value green" id="s-yoc">—</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Avg Yield on Price</div>
-      <div class="stat-value" id="s-yop">—</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Est. Annual Total</div>
-      <div class="stat-value green" id="s-annual">—</div>
+    <div class="summary-row summary-row--portfolio">
+      <div class="stat">
+        <div class="stat-label">Market Value</div>
+        <div class="stat-value" id="s-mktval">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Total Cost</div>
+        <div class="stat-value" id="s-cost">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Unrealized Gain / Loss</div>
+        <div class="stat-value" id="s-gain">—</div>
+      </div>
     </div>
   </div>
 
