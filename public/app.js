@@ -419,21 +419,21 @@ function renderCalendar() {
 
 // ── Table render helpers ───────────────────────────────────────────
 const COLS = [
-  { key: 'symbol',    label: 'Ticker',       cls: '' },
-  { key: 'name',      label: 'Company',      cls: '' },
-  { key: 'price',     label: 'Price',        cls: 'r' },
-  { key: 'cost',      label: 'Cost / Sh',    cls: 'r' },
-  { key: 'shares',    label: 'Shares',       cls: 'r' },
-  { key: 'exdate',    label: 'Ex-Date',      cls: 'r' },
-  { key: 'paydate',   label: 'Pay Date',     cls: 'r' },
-  { key: 'dist',      label: 'Dist / Sh',    cls: 'r' },
-  { key: 'freq',      label: 'Freq',         cls: '' },
-  { key: 'annrate',   label: 'Ann. Rate',    cls: 'r' },
-  { key: 'yop',       label: 'Yield/Price',  cls: 'r' },
-  { key: 'yoc',       label: 'Yield/Cost',   cls: 'r hl' },
-  { key: 'estpay',    label: 'Est. Payout',  cls: 'r' },
-  { key: 'annpayout', label: 'Ann. Payout',  cls: 'r hl' },
-  { key: null,        label: '',             cls: '' },
+  { key: 'symbol',    label: 'Ticker',       cls: '',      w: 66  },
+  { key: 'name',      label: 'Company',      cls: ''             },  // flexible — absorbs remaining width
+  { key: 'price',     label: 'Price',        cls: 'r',     w: 74  },
+  { key: 'cost',      label: 'Cost / Sh',    cls: 'r',     w: 76  },
+  { key: 'shares',    label: 'Shares',       cls: 'r',     w: 74  },
+  { key: 'exdate',    label: 'Ex-Date',      cls: 'r',     w: 144 },
+  { key: 'paydate',   label: 'Pay Date',     cls: 'r',     w: 92  },
+  { key: 'dist',      label: 'Dist / Sh',    cls: 'r',     w: 76  },
+  { key: 'freq',      label: 'Freq',         cls: '',      w: 82  },
+  { key: 'annrate',   label: 'Ann. Rate',    cls: 'r',     w: 80  },
+  { key: 'yop',       label: 'Yield/Price',  cls: 'r',     w: 96  },
+  { key: 'yoc',       label: 'Yield/Cost',   cls: 'r hl',  w: 96  },
+  { key: 'estpay',    label: 'Est. Payout',  cls: 'r',     w: 92  },
+  { key: 'annpayout', label: 'Ann. Payout',  cls: 'r hl',  w: 92  },
+  { key: null,        label: '',             cls: '',      w: 86  },
 ];
 
 let sortCol = 'exdate', sortDir = 1; // 1=asc, -1=desc
@@ -477,11 +477,12 @@ function sortedTickers() {
 
 function renderHeaders() {
   document.getElementById('thead-row').innerHTML = COLS.map(c => {
-    if (!c.key) return `<th></th>`;
+    const style = c.w ? ` style="width:${c.w}px"` : '';
+    if (!c.key) return `<th${style}></th>`;
     const active = sortCol === c.key;
     const arrow  = active ? `<span class="sort-arrow">${sortDir === 1 ? '▲' : '▼'}</span>` : '';
     const cls    = [c.cls, active ? 'sort-active' : ''].filter(Boolean).join(' ');
-    return `<th class="${cls}" data-sort="${c.key}">${c.label}${arrow}</th>`;
+    return `<th class="${cls}" data-sort="${c.key}"${style}>${c.label}${arrow}</th>`;
   }).join('');
 }
 
