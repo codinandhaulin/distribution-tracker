@@ -14,6 +14,10 @@ let currentUser = null;
 let _statusTimer = null;
 let calEvents  = {};
 
+const parseISO = s => new Date(s + 'T12:00:00Z');
+const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
+const diffDays = (a, b) => Math.round((a - b) / 86400000);
+
 function setStatus(text, loading = false) {
   const el = document.getElementById('last-updated');
   if (!el) return;
@@ -52,7 +56,8 @@ function persist() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(S.tickers)
-  }).catch(e => console.error('Failed to save portfolio:', e));
+  }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
+    .catch(e => { console.error('Failed to save portfolio:', e); toast('Failed to save', true); });
 }
 async function hydrate() {
   try {
@@ -69,14 +74,14 @@ const fmtN = (v, d=3) => v == null ? '—' : Number(v).toLocaleString(undefined,
 
 function fmtDate(iso) {
   if (!iso) return '—';
-  const d = new Date(iso + 'T12:00:00Z');
+  const d = parseISO(iso);
   return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' });
 }
 
 function daysUntil(iso) {
   if (!iso) return null;
   const today = new Date(); today.setHours(0,0,0,0);
-  const d = new Date(iso + 'T12:00:00Z'); d.setHours(0,0,0,0);
+  const d = parseISO(iso); d.setHours(0,0,0,0);
   return isNaN(d) ? null : Math.round((d - today) / 86400000);
 }
 
@@ -88,18 +93,20 @@ const freqLabel = f => FREQ_LABEL[f] || `×${f}/yr`;
 // Client just awaits the response; cache hits return immediately,
 // uncached tickers are spaced 30s apart by the server queue.
 
-async function fetchTicker(symbol, force = false, progress = '') {
+async function fetchTicker(symbol, force = false, progress = '', silent = false) {
   S.loading[symbol] = true; S.errors[symbol] = null;
-  render();
-  clearInterval(_statusTimer);
-  let secs = 0;
-  const QUEUE_INTERVAL = 30;
-  const label = () => {
-    const remaining = Math.max(0, QUEUE_INTERVAL - secs);
-    return `⟳ Fetching ${symbol}${progress ? ' ' + progress : ''} · next in ~${remaining}s`;
-  };
-  setStatus(label(), true);
-  _statusTimer = setInterval(() => { secs++; setStatus(label(), true); }, 1000);
+  if (!silent) {
+    render();
+    clearInterval(_statusTimer);
+    let secs = 0;
+    const QUEUE_INTERVAL = 30;
+    const label = () => {
+      const remaining = Math.max(0, QUEUE_INTERVAL - secs);
+      return `⟳ Fetching ${symbol}${progress ? ' ' + progress : ''} · next in ~${remaining}s`;
+    };
+    setStatus(label(), true);
+    _statusTimer = setInterval(() => { secs++; setStatus(label(), true); }, 1000);
+  }
   try {
     const url = `/api/ticker/${encodeURIComponent(symbol)}${force ? '?force=1' : ''}`;
     const r = await fetch(url);
@@ -113,7 +120,7 @@ async function fetchTicker(symbol, force = false, progress = '') {
   }
   clearInterval(_statusTimer);
   S.loading[symbol] = false;
-  render();
+  if (!silent) render();
 }
 
 // ── Actions ────────────────────────────────────────────────────────
@@ -236,6 +243,14 @@ function occurrencesInMonth(anchorDateStr, intervalDays, year, month) {
   return results;
 }
 
+function projectionParams(d) {
+  const intervalDays = d.frequency ? Math.round(365 / d.frequency) : 91;
+  const payOffset = (d.dividendDate && d.exDividendDate)
+    ? diffDays(parseISO(d.dividendDate), parseISO(d.exDividendDate))
+    : 14;
+  return { intervalDays, payOffset };
+}
+
 // ── Calendar render ────────────────────────────────────────────────
 const CAL_MONTHS = ['January','February','March','April','May','June',
                     'July','August','September','October','November','December'];
@@ -282,23 +297,17 @@ function renderCalendar() {
 
     // ── Future: project forward from the next estimated/declared ex-date ──
     if (!d.exDividendDate) continue;
-    const histDates     = new Set((d.history || []).map(h => h.date));
-    const intervalDays  = d.frequency ? Math.round(365 / d.frequency) : 91;
-    const exType        = d.isEstimated ? 'est' : 'ex';
-    const payOffsetDays = d.dividendDate
-      ? Math.round((new Date(d.dividendDate + 'T12:00:00Z') - new Date(d.exDividendDate + 'T12:00:00Z')) / 86400000)
-      : null;
+    const histDates = new Set((d.history || []).map(h => h.date));
+    const { intervalDays, payOffset: payOffsetDays } = projectionParams(d);
+    const exType = d.isEstimated ? 'est' : 'ex';
 
     for (const exDate of occurrencesInMonth(d.exDividendDate, intervalDays, calYear, calMonth)) {
       if (exDate < todayStr || histDates.has(exDate)) continue;
       addEv(exDate, symbol, exType);
-      if (payOffsetDays !== null) {
-        const payDate = new Date(new Date(exDate + 'T12:00:00Z').getTime() + payOffsetDays * 86400000)
-          .toISOString().split('T')[0];
-        const payAmt     = (d.distributionAmount && shares) ? shares * d.distributionAmount : null;
-        const prevPerSh  = hist[0]?.amount ?? null;
-        addEv(payDate, symbol, 'pay', payAmt, true, d.distributionAmount ?? null, prevPerSh);
-      }
+      const payDate = addDays(parseISO(exDate), payOffsetDays).toISOString().split('T')[0];
+      const payAmt = (d.distributionAmount && shares) ? shares * d.distributionAmount : null;
+      const prevPerSh = hist[0]?.amount ?? null;
+      addEv(payDate, symbol, 'pay', payAmt, true, d.distributionAmount ?? null, prevPerSh);
     }
   }
 
@@ -440,7 +449,7 @@ function sortVal(col, t) {
     case 'exdate': {
       if (!d?.exDividendDate) return null;
       const today = new Date(); today.setHours(0, 0, 0, 0);
-      const diff = (new Date(d.exDividendDate + 'T12:00:00Z') - today) / 86400000;
+      const diff = (parseISO(d.exDividendDate) - today) / 86400000;
       return diff >= 0 ? diff : 1e9 - diff;
     }
     case 'paydate':   return d?.dividendDate || null;
@@ -605,13 +614,10 @@ function computeMonthlyProjections() {
   for (const { symbol, shares } of S.tickers) {
     const d = S.data[symbol];
     if (!d?.exDividendDate || !d.distributionAmount || !shares) continue;
-    const intervalDays = d.frequency ? Math.round(365 / d.frequency) : 91;
-    const payOffset    = d.dividendDate
-      ? Math.round((new Date(d.dividendDate+'T12:00:00Z') - new Date(d.exDividendDate+'T12:00:00Z')) / 86400000)
-      : 14;
+    const { intervalDays, payOffset } = projectionParams(d);
     for (const slot of months) {
       for (const exDate of occurrencesInMonth(d.exDividendDate, intervalDays, slot.year, slot.month)) {
-        const pd  = new Date(new Date(exDate+'T12:00:00Z').getTime() + payOffset * 86400000);
+        const pd = addDays(parseISO(exDate), payOffset);
         const key = `${pd.getUTCFullYear()}-${String(pd.getUTCMonth()+1).padStart(2,'0')}`;
         const si  = idxMap[key];
         if (si == null) continue;
@@ -655,19 +661,14 @@ function renderChart() {
 // ── Ticker detail modal ────────────────────────────────────────────
 function projectFutureDates(d, count = 4) {
   if (!d.exDividendDate || !d.frequency) return [];
-  const intervalDays = Math.round(365 / d.frequency);
-  const payOffset = (d.dividendDate && d.exDividendDate)
-    ? Math.round((new Date(d.dividendDate + 'T12:00:00Z') - new Date(d.exDividendDate + 'T12:00:00Z')) / 86400000)
-    : null;
+  const { intervalDays, payOffset } = projectionParams(d);
   const results = [];
-  let next = new Date(d.exDividendDate + 'T12:00:00Z');
+  let next = parseISO(d.exDividendDate);
   for (let i = 0; i < count; i++) {
     const exDate = next.toISOString().split('T')[0];
-    const payDate = payOffset != null
-      ? new Date(next.getTime() + payOffset * 86400000).toISOString().split('T')[0]
-      : null;
+    const payDate = addDays(next, payOffset).toISOString().split('T')[0];
     results.push({ exDate, payDate, amount: d.distributionAmount, est: i === 0 ? d.isEstimated : true });
-    next = new Date(next.getTime() + intervalDays * 86400000);
+    next = addDays(next, intervalDays);
   }
   return results;
 }
@@ -723,7 +724,7 @@ function openSymbolModal(symbol) {
       <div class="hist-chart">
         ${allBars.map((b, i) => {
           const h   = b.amount > 0 ? Math.max(Math.round((b.amount - floor) / range * BAR_H), 2) : 0;
-          const dt  = new Date(b.date + 'T12:00:00Z');
+          const dt = parseISO(b.date);
           const lbl = (i % step === 0 || i === allBars.length - 1)
             ? `${MON[dt.getUTCMonth()]} '${String(dt.getUTCFullYear()).slice(2)}`
             : '';
@@ -743,7 +744,7 @@ function openSymbolModal(symbol) {
   const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const shortDate = iso => {
     if (!iso) return '—';
-    const dt = new Date(iso + 'T12:00:00Z');
+    const dt = parseISO(iso);
     return `${MONS[dt.getUTCMonth()]} ${dt.getUTCDate()}, ${dt.getUTCFullYear()}`;
   };
 
@@ -809,7 +810,7 @@ function openDayModal(dateStr) {
   const evs = calEvents[dateStr] || [];
   if (!evs.length) return;
 
-  const dt = new Date(dateStr + 'T12:00:00Z');
+  const dt = parseISO(dateStr);
   const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getUTCDay()];
   document.getElementById('day-modal-title').textContent =
     `${dayName}, ${CAL_MONTHS[dt.getUTCMonth()]} ${dt.getUTCDate()}`;
@@ -1069,9 +1070,13 @@ async function startApp() {
   } catch {}
 
   if (S.tickers.length > 0) {
-    // Parallel on page load — server cache returns all warm hits immediately.
-    // batchFetch (sequential) is reserved for Refresh All and CSV import.
-    await Promise.all(S.tickers.map(t => fetchTicker(t.symbol)));
+    // Show all as loading immediately, then fire parallel fetches silently.
+    // Each resolves independently; a single render after Promise.all settles.
+    // batchFetch (sequential + progress) is reserved for Refresh All and CSV import.
+    S.tickers.forEach(t => { S.loading[t.symbol] = true; });
+    render();
+    await Promise.all(S.tickers.map(t => fetchTicker(t.symbol, false, '', true)));
+    render();
     setStatus('Updated ' + new Date().toLocaleTimeString());
   }
 

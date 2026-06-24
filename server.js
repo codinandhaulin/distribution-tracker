@@ -165,19 +165,12 @@ function estimateNextExDate(lastDate, frequency) {
   return next.toISOString().split('T')[0];
 }
 
-async function fetchFromPolygon(symbol) {
-  const [prevClose, divResp, tickerRef] = await Promise.all([
-    polyGetRetry(`/v2/aggs/ticker/${symbol}/prev`),
-    polyGetRetry(`/v3/reference/dividends?ticker=${symbol}&limit=24&order=desc`).catch(() => null),
-    polyGetRetry(`/v3/reference/tickers/${symbol}`).catch(() => null),
-  ]);
-
+function shapeTickerData(symbol, prevClose, divResp, tickerRef, today = new Date().toISOString().split('T')[0]) {
   const price = prevClose?.results?.[0]?.c;
   if (!price) { const e = new Error(`Ticker "${symbol}" not found or has no price data.`); e.notFound = true; throw e; }
 
-  const name = tickerRef?.results?.name || symbol;
+  const name    = tickerRef?.results?.name || symbol;
   const allDivs = (divResp?.results || []).filter(d => d.cash_amount > 0);
-  const today   = new Date().toISOString().split('T')[0];
   const future  = allDivs.filter(d => d.ex_dividend_date > today);
   const past    = allDivs.filter(d => d.ex_dividend_date <= today);
   const next    = future.length ? future[future.length - 1] : null;
@@ -209,6 +202,15 @@ async function fetchFromPolygon(symbol) {
     frequency, isEstimated, currency: 'USD',
     history: allDivs.map(d => ({ date: d.ex_dividend_date, amount: d.cash_amount, payDate: d.pay_date || null })),
   };
+}
+
+async function fetchFromPolygon(symbol) {
+  const [prevClose, divResp, tickerRef] = await Promise.all([
+    polyGetRetry(`/v2/aggs/ticker/${symbol}/prev`),
+    polyGetRetry(`/v3/reference/dividends?ticker=${symbol}&limit=24&order=desc`).catch(() => null),
+    polyGetRetry(`/v3/reference/tickers/${symbol}`).catch(() => null),
+  ]);
+  return shapeTickerData(symbol, prevClose, divResp, tickerRef);
 }
 
 // ── Server-side Polygon queue ─────────────────────────────────────────

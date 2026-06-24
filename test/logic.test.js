@@ -1,19 +1,30 @@
 /**
- * Tests for pure logic functions extracted from public/app.js.
+ * Tests for pure logic functions extracted from public/app.js and server.js.
  *
  * Run:  npm test
  *
- * These functions have no DOM dependency and are the highest-risk areas:
+ * Covers:
  *   - occurrencesInMonth  — drives the calendar AND the 12-month forecast chart
+ *   - projectionParams    — shared interval/offset helper used by all three projection sites
  *   - projectFutureDates  — drives the ticker detail modal
  *   - parseCSVRow / parseNum — drives CSV import
  *   - mergePositions      — weighted-average cost basis on duplicate ticker rows
+ *   - estimateNextExDate  — server-side next ex-date estimator
+ *   - shapeTickerData     — server-side Polygon response → app data object
  *
- * When you change a function in app.js, update the copy here too.
+ * When you change a function in app.js or server.js, update the copy here too.
  */
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers — kept in sync with public/app.js
+// ─────────────────────────────────────────────────────────────────────────────
+
+const parseISO = s => new Date(s + 'T12:00:00Z');
+const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
+const diffDays = (a, b) => Math.round((a - b) / 86400000);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Functions under test — kept in sync with public/app.js
@@ -34,23 +45,77 @@ function occurrencesInMonth(anchorDateStr, intervalDays, year, month) {
   return results;
 }
 
+function projectionParams(d) {
+  const intervalDays = d.frequency ? Math.round(365 / d.frequency) : 91;
+  const payOffset = (d.dividendDate && d.exDividendDate)
+    ? diffDays(parseISO(d.dividendDate), parseISO(d.exDividendDate))
+    : 14;
+  return { intervalDays, payOffset };
+}
+
 function projectFutureDates(d, count = 4) {
   if (!d.exDividendDate || !d.frequency) return [];
-  const intervalDays = Math.round(365 / d.frequency);
-  const payOffset = (d.dividendDate && d.exDividendDate)
-    ? Math.round((new Date(d.dividendDate + 'T12:00:00Z') - new Date(d.exDividendDate + 'T12:00:00Z')) / 86400000)
-    : null;
+  const { intervalDays, payOffset } = projectionParams(d);
   const results = [];
-  let next = new Date(d.exDividendDate + 'T12:00:00Z');
+  let next = parseISO(d.exDividendDate);
   for (let i = 0; i < count; i++) {
     const exDate = next.toISOString().split('T')[0];
-    const payDate = payOffset != null
-      ? new Date(next.getTime() + payOffset * 86400000).toISOString().split('T')[0]
-      : null;
+    const payDate = addDays(next, payOffset).toISOString().split('T')[0];
     results.push({ exDate, payDate, amount: d.distributionAmount, est: i === 0 ? d.isEstimated : true });
-    next = new Date(next.getTime() + intervalDays * 86400000);
+    next = addDays(next, intervalDays);
   }
   return results;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Server-side functions — kept in sync with server.js
+// ─────────────────────────────────────────────────────────────────────────────
+
+function estimateNextExDate(lastDate, frequency) {
+  const days = { 52:7, 12:30, 4:91, 2:182, 1:365 }[frequency] || Math.round(365 / frequency);
+  const today = new Date(); today.setHours(0,0,0,0);
+  let next = new Date(lastDate + 'T12:00:00Z');
+  while (next <= today) next = new Date(next.getTime() + days * 86400000);
+  return next.toISOString().split('T')[0];
+}
+
+function shapeTickerData(symbol, prevClose, divResp, tickerRef, today = new Date().toISOString().split('T')[0]) {
+  const price = prevClose?.results?.[0]?.c;
+  if (!price) { const e = new Error(`Ticker "${symbol}" not found or has no price data.`); e.notFound = true; throw e; }
+
+  const name    = tickerRef?.results?.name || symbol;
+  const allDivs = (divResp?.results || []).filter(d => d.cash_amount > 0);
+  const future  = allDivs.filter(d => d.ex_dividend_date > today);
+  const past    = allDivs.filter(d => d.ex_dividend_date <= today);
+  const next    = future.length ? future[future.length - 1] : null;
+
+  const frequency  = allDivs[0]?.frequency ?? null;
+  const recentDiv  = next || past[0] || null;
+  const distAmt    = recentDiv?.cash_amount ?? 0;
+
+  let exDividendDate = next?.ex_dividend_date ?? null;
+  let dividendDate   = next?.pay_date ?? null;
+  let isEstimated    = false;
+
+  if (!exDividendDate && past.length > 0) {
+    exDividendDate = estimateNextExDate(past[0].ex_dividend_date, frequency);
+    isEstimated    = true;
+    const lastEx = past[0].ex_dividend_date, lastPay = past[0].pay_date;
+    if (lastEx && lastPay) {
+      const off = Math.round((new Date(lastPay+'T12:00:00Z') - new Date(lastEx+'T12:00:00Z')) / 86400000);
+      const est = new Date(exDividendDate+'T12:00:00Z');
+      est.setDate(est.getDate() + off);
+      dividendDate = est.toISOString().split('T')[0];
+    }
+  }
+
+  return {
+    symbol, name, currentPrice: price,
+    annualDividendRate: (distAmt && frequency) ? distAmt * frequency : 0,
+    exDividendDate, dividendDate, distributionAmount: distAmt,
+    frequency, isEstimated, currency: 'USD',
+    history: allDivs.map(d => ({ date: d.ex_dividend_date, amount: d.cash_amount, payDate: d.pay_date || null })),
+  };
 }
 
 function parseCSVRow(line) {
@@ -222,11 +287,11 @@ describe('projectFutureDates', () => {
     assert.equal(res[1].est, true);
   });
 
-  test('no dividendDate → payDate is null', () => {
+  test('no dividendDate → payDate falls back to ex-date + 14 days', () => {
     const noPay = { ...monthlyTicker, dividendDate: null };
     const res = projectFutureDates(noPay, 2);
-    assert.equal(res[0].payDate, null);
-    assert.equal(res[1].payDate, null);
+    assert.equal(res[0].payDate, '2026-07-15'); // 2026-07-01 + 14
+    assert.equal(res[1].payDate, '2026-08-14'); // 2026-07-31 + 14
   });
 
   test('missing frequency → returns empty array', () => {
@@ -449,5 +514,206 @@ describe('CSV header detection', () => {
   test('skip rows: "Cash" row', () => assert.ok(reSkip.test('Cash')));
   test('skip rows: "Total" row', () => assert.ok(reSkip.test('Total Account Value')));
   test('does not skip normal ticker', () => assert.ok(!reSkip.test('MSTY')));
+
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// estimateNextExDate  (server.js)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('estimateNextExDate', () => {
+
+  test('far-future anchor returned unchanged (loop does not run)', () => {
+    assert.equal(estimateNextExDate('2099-06-15', 12), '2099-06-15');
+  });
+
+  test('result is always strictly in the future for old anchor', () => {
+    const result = estimateNextExDate('2020-01-01', 12);
+    const today = new Date(); today.setHours(0,0,0,0);
+    assert.ok(new Date(result + 'T12:00:00Z') > today, 'result should be after today');
+  });
+
+  test('monthly (12): one interval back from result is in the past', () => {
+    const result = estimateNextExDate('2020-01-01', 12);
+    const rDate = new Date(result + 'T12:00:00Z');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const prevDate = new Date(rDate.getTime() - 30 * 86400000);
+    assert.ok(rDate > today, 'result is in the future');
+    assert.ok(prevDate <= today, 'one interval back is not in the future');
+  });
+
+  test('weekly (52): one interval back from result is in the past', () => {
+    const result = estimateNextExDate('2020-01-01', 52);
+    const rDate = new Date(result + 'T12:00:00Z');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const prevDate = new Date(rDate.getTime() - 7 * 86400000);
+    assert.ok(rDate > today);
+    assert.ok(prevDate <= today);
+  });
+
+  test('quarterly (4): one interval back from result is in the past', () => {
+    const result = estimateNextExDate('2020-01-01', 4);
+    const rDate = new Date(result + 'T12:00:00Z');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const prevDate = new Date(rDate.getTime() - 91 * 86400000);
+    assert.ok(rDate > today);
+    assert.ok(prevDate <= today);
+  });
+
+  test('returns a valid ISO date string', () => {
+    assert.match(estimateNextExDate('2020-01-01', 12), /^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  test('unknown frequency falls back to Math.round(365/freq)', () => {
+    // frequency=6 (semi-monthly) → 365/6 ≈ 61 days; far-future anchor
+    const result = estimateNextExDate('2099-01-01', 6);
+    assert.equal(result, '2099-01-01');
+  });
+
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// projectionParams  (public/app.js)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('projectionParams', () => {
+
+  test('monthly frequency → 30-day interval', () => {
+    const { intervalDays } = projectionParams({ frequency: 12, exDividendDate: '2026-07-01', dividendDate: '2026-07-08' });
+    assert.equal(intervalDays, 30);
+  });
+
+  test('weekly frequency → 7-day interval', () => {
+    const { intervalDays } = projectionParams({ frequency: 52, exDividendDate: '2026-07-01', dividendDate: '2026-07-05' });
+    assert.equal(intervalDays, 7);
+  });
+
+  test('null frequency → 91-day interval default', () => {
+    const { intervalDays } = projectionParams({ frequency: null, exDividendDate: '2026-07-01', dividendDate: null });
+    assert.equal(intervalDays, 91);
+  });
+
+  test('payOffset computed from dividendDate − exDividendDate', () => {
+    const { payOffset } = projectionParams({ frequency: 12, exDividendDate: '2026-07-01', dividendDate: '2026-07-08' });
+    assert.equal(payOffset, 7);
+  });
+
+  test('null dividendDate → payOffset falls back to 14', () => {
+    const { payOffset } = projectionParams({ frequency: 12, exDividendDate: '2026-07-01', dividendDate: null });
+    assert.equal(payOffset, 14);
+  });
+
+  test('null both dates → payOffset falls back to 14', () => {
+    const { payOffset } = projectionParams({ frequency: 12, exDividendDate: null, dividendDate: null });
+    assert.equal(payOffset, 14);
+  });
+
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// shapeTickerData  (server.js)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('shapeTickerData', () => {
+
+  const pc   = price => ({ results: [{ c: price }] });
+  const ref  = name  => ({ results: { name } });
+  const divs = (...ds) => ({ results: ds });
+  const div  = (ex, pay, amount, freq = 12) => ({ ex_dividend_date: ex, pay_date: pay, cash_amount: amount, frequency: freq });
+
+  test('extracts price and symbol', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), null, null, '2026-06-23');
+    assert.equal(r.currentPrice, 24.50);
+    assert.equal(r.symbol, 'MSTY');
+    assert.equal(r.currency, 'USD');
+  });
+
+  test('throws notFound error when prevClose has no results', () => {
+    assert.throws(
+      () => shapeTickerData('FAKE', { results: [] }, null, null, '2026-06-23'),
+      err => err.notFound === true
+    );
+  });
+
+  test('throws notFound error when prevClose is null', () => {
+    assert.throws(
+      () => shapeTickerData('FAKE', null, null, null, '2026-06-23'),
+      err => err.notFound === true
+    );
+  });
+
+  test('uses tickerRef name', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), null, ref('YieldMax MSTY Option Income'), '2026-06-23');
+    assert.equal(r.name, 'YieldMax MSTY Option Income');
+  });
+
+  test('falls back to symbol when no tickerRef', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), null, null, '2026-06-23');
+    assert.equal(r.name, 'MSTY');
+  });
+
+  test('uses declared future ex-date when available', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), divs(div('2026-07-01', '2026-07-08', 1.50)), null, '2026-06-23');
+    assert.equal(r.exDividendDate, '2026-07-01');
+    assert.equal(r.dividendDate, '2026-07-08');
+    assert.equal(r.isEstimated, false);
+  });
+
+  test('estimates next ex-date when all dividends are past', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), divs(div('2026-06-01', '2026-06-08', 1.50)), null, '2026-06-23');
+    assert.ok(r.exDividendDate > '2026-06-23', 'estimated ex-date should be in the future');
+    assert.equal(r.isEstimated, true);
+  });
+
+  test('estimated pay-date mirrors the historical ex→pay offset', () => {
+    // last div: ex Jun 1, pay Jun 10 (9-day gap) — estimated pay should also be 9 days after next ex
+    const r = shapeTickerData('MSTY', pc(24.50), divs(div('2026-06-01', '2026-06-10', 1.50)), null, '2026-06-23');
+    const diff = Math.round(
+      (new Date(r.dividendDate + 'T12:00:00Z') - new Date(r.exDividendDate + 'T12:00:00Z')) / 86400000
+    );
+    assert.equal(diff, 9);
+  });
+
+  test('computes annualDividendRate = distAmt × frequency', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), divs(div('2026-07-01', '2026-07-08', 1.50, 12)), null, '2026-06-23');
+    assert.equal(r.annualDividendRate, 18);
+  });
+
+  test('builds history array ordered newest-first from API', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), divs(
+      div('2026-07-01', '2026-07-08', 1.50),
+      div('2026-06-01', '2026-06-08', 1.48),
+    ), null, '2026-06-23');
+    assert.equal(r.history.length, 2);
+    assert.equal(r.history[0].date, '2026-07-01');
+    assert.equal(r.history[0].amount, 1.50);
+    assert.equal(r.history[0].payDate, '2026-07-08');
+    assert.equal(r.history[1].date, '2026-06-01');
+  });
+
+  test('filters out zero-amount dividends', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), divs(
+      div('2026-07-01', '2026-07-08', 0),   // zero — filtered
+      div('2026-06-01', '2026-06-08', 1.48),
+    ), null, '2026-06-23');
+    assert.equal(r.history.length, 1);
+  });
+
+  test('null divResp → empty history, null ex-date, zero annualDividendRate', () => {
+    const r = shapeTickerData('MSTY', pc(24.50), null, null, '2026-06-23');
+    assert.deepEqual(r.history, []);
+    assert.equal(r.exDividendDate, null);
+    assert.equal(r.frequency, null);
+    assert.equal(r.annualDividendRate, 0);
+  });
+
+  test('future dividends: uses most-recent future entry (last in array)', () => {
+    // future array sorted newest-first by Polygon; last entry = nearest future
+    const r = shapeTickerData('MSTY', pc(24.50), divs(
+      div('2026-08-01', '2026-08-08', 1.52), // further future
+      div('2026-07-01', '2026-07-08', 1.50), // nearest future
+    ), null, '2026-06-23');
+    assert.equal(r.exDividendDate, '2026-07-01');
+  });
 
 });
