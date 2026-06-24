@@ -467,7 +467,12 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
   #chart-card { display: none; }
 
   /* Calendar — drop week-total column, shrink cells and chips */
-  .cal-week-total, .cal-dow-week { display: none; }
+  .cal-dow-week { display: none; }
+  .cal-week-total {
+    grid-column: 1 / -1; min-width: 0; padding: 3px 10px;
+    border-left: none; border-top: 1px solid rgba(63,185,80,.25);
+    background: rgba(63,185,80,.06); font-size: 11px; justify-content: flex-end;
+  }
   .cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .cal-cell { min-height: 52px; padding: 2px 2px; }
   .cal-chip { font-size: 8px; padding: 1px 2px; border-radius: 2px; }

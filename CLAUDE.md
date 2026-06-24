@@ -169,6 +169,8 @@ npm test   # runs test/logic.test.js via node:test (built-in, no extra install)
 
 **Portfolio profile:** High-yield covered-call ETFs (MSTY, CONY, TSLY, AIPI, QQQI, BLOX, SPYI, TSPY, etc.), some BDCs (PBDC, CSWC), and a few growth positions (VOO, VUG, PYPL, RTX). Holds positions across both Margin and Cash accounts at Fidelity — CSV exports contain duplicate ticker rows that must be merged (shares summed, cost basis weighted-averaged).
 
+**Plans:** Design/planning documents are saved in `plans/` in the repo root. Save each plan there (in addition to the Claude plan file) so decisions are captured in git history.
+
 **How Martin likes to work:**
 - Keep solutions simple — this is a personal tool, not a production codebase. Prefer editing existing functions over adding new abstraction layers. Three similar lines beats a premature helper.
 - Update CLAUDE.md **and README.md** continuously after every meaningful change, not just at end of session.
