@@ -12,6 +12,7 @@ let calMonth   = new Date().getMonth(); // 0-indexed
 let _editSym   = null;
 let currentUser = null;
 let _statusTimer = null;
+let calEvents  = {};
 
 function setStatus(text, loading = false) {
   const el = document.getElementById('last-updated');
@@ -335,7 +336,7 @@ function renderCalendar() {
       const chipClass = e.type === 'pay' ? (e.est ? 'chip-pay-est' : 'chip-pay') : `chip-${e.type}`;
 
       if (e.type !== 'pay') {
-        return `<span class="cal-chip ${chipClass}" onclick="openSymbolModal('${e.symbol}')" style="cursor:pointer" title="Ex-date · ${e.symbol}">${e.symbol}</span>`;
+        return `<span class="cal-chip ${chipClass}" onclick="openSymbolModal('${e.symbol}');event.stopPropagation()" style="cursor:pointer" title="Ex-date · ${e.symbol}">${e.symbol}</span>`;
       }
 
       // Build delta indicator (per-share comparison)
@@ -354,7 +355,7 @@ function renderCalendar() {
       const amtStr  = e.amount ? ` ${fmt$(e.amount)}` : '';
       const label   = `${e.symbol}${amtStr}${deltaHtml}`;
       const title   = `${e.est ? 'Estimated pay' : 'Pay'}-date · ${e.symbol}${titleExtra}`;
-      return `<span class="cal-chip ${chipClass}" onclick="openSymbolModal('${e.symbol}')" style="cursor:pointer" title="${title}">${label}</span>`;
+      return `<span class="cal-chip ${chipClass}" onclick="openSymbolModal('${e.symbol}');event.stopPropagation()" style="cursor:pointer" title="${title}">${label}</span>`;
     }).join('');
   }
 
@@ -380,6 +381,8 @@ function renderCalendar() {
   const trail = cells.length % 7;
   if (trail > 0) for (let i = 0; i < 7 - trail; i++) cells.push(null);
 
+  calEvents = events;
+
   let html = CAL_DOWS.map(d => `<div class="cal-dow">${d}</div>`).join('') +
              `<div class="cal-dow-week">Week</div>`;
 
@@ -394,7 +397,7 @@ function renderCalendar() {
         .reduce((s, e) => s + e.amount, 0);
       const dayTotalHtml = dayPayTotal > 0
         ? `<span class="cal-day-total">${fmt$(dayPayTotal)}</span>` : '';
-      html += `<div class="cal-cell${isToday ? ' today' : ''}">
+      html += `<div class="cal-cell${isToday ? ' today' : ''}" onclick="openDayModal('${ds}')">
         <div class="cal-day-hdr"><div class="cal-day-num">${Number(ds.slice(8))}</div>${dayTotalHtml}</div>
         <div class="cal-events">${makeChips(ds)}</div>
       </div>`;
@@ -801,6 +804,66 @@ function closeSymbolModal() {
   document.getElementById('symbol-modal').classList.add('hidden');
 }
 
+// ── Day detail modal ───────────────────────────────────────────────
+function openDayModal(dateStr) {
+  const evs = calEvents[dateStr] || [];
+  if (!evs.length) return;
+
+  const dt = new Date(dateStr + 'T12:00:00Z');
+  const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getUTCDay()];
+  document.getElementById('day-modal-title').textContent =
+    `${dayName}, ${CAL_MONTHS[dt.getUTCMonth()]} ${dt.getUTCDate()}`;
+
+  const payTotal = evs.filter(e => e.type === 'pay').reduce((s, e) => s + (e.amount || 0), 0);
+
+  const sorted = [...evs].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'pay' ? -1 : 1;
+    return (b.amount || 0) - (a.amount || 0);
+  });
+
+  let html = '';
+  if (payTotal > 0)
+    html += `<div class="day-modal-total">${fmt$(payTotal)}</div>`;
+
+  html += sorted.map(ev => {
+    const isPay = ev.type === 'pay';
+    const typeColor = isPay
+      ? (ev.est ? 'var(--muted)' : 'var(--green)')
+      : (ev.type === 'est' ? 'var(--purple)' : 'var(--red)');
+    const typeLabel = isPay ? 'PAY' : 'EX';
+    const amt = isPay && ev.amount ? fmt$(ev.amount) : ev.perShare ? `${fmt$(ev.perShare, 4)}/sh` : '';
+    const estBadge = ev.est ? `<span class="day-modal-est">est</span>` : '';
+
+    let deltaHtml = '', titleExtra = '';
+    if (isPay && ev.perShare != null && ev.prevPerShare != null && ev.prevPerShare !== 0) {
+      const pct = (ev.perShare - ev.prevPerShare) / ev.prevPerShare * 100;
+      if (Math.abs(pct) >= 0.1) {
+        const up = pct > 0;
+        const color = up ? 'var(--green-hi)' : 'var(--red)';
+        const arrow = up ? '▲' : '▼';
+        deltaHtml  = `<span style="font-size:11px;color:${color};margin-left:4px">${arrow}${Math.abs(pct).toFixed(1)}%</span>`;
+        titleExtra = ` — Prev: ${fmt$(ev.prevPerShare, 4)}/sh → ${fmt$(ev.perShare, 4)}/sh (${up ? '+' : ''}${pct.toFixed(1)}%)`;
+      }
+    }
+    const title = isPay
+      ? `${ev.est ? 'Estimated pay' : 'Pay'}-date · ${ev.symbol}${titleExtra}`
+      : `${ev.type === 'est' ? 'Estimated ex' : 'Ex'}-date · ${ev.symbol}`;
+
+    return `<div class="day-modal-row" onclick="openSymbolModal('${ev.symbol}')" title="${title}">
+      <span class="badge">${ev.symbol}</span>
+      <span class="day-modal-type" style="color:${typeColor}">${typeLabel}</span>
+      <span class="day-modal-amt">${amt}${estBadge}${deltaHtml}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('day-modal-body').innerHTML = html;
+  document.getElementById('day-modal').classList.remove('hidden');
+}
+
+function closeDayModal() {
+  document.getElementById('day-modal').classList.add('hidden');
+}
+
 // ── Render ─────────────────────────────────────────────────────────
 function render() {
   const has = S.tickers.length > 0;
@@ -963,7 +1026,7 @@ async function startApp() {
   render();
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeEditModal(); closeSymbolModal(); }
+    if (e.key === 'Escape') { closeEditModal(); closeSymbolModal(); closeDayModal(); }
   });
 
   const chartTip = document.getElementById('chart-tip');

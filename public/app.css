@@ -385,6 +385,21 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
 /* ── Ticker detail modal ── */
 .modal-wide { width: 640px; }
 
+/* ── Day detail modal ── */
+#day-modal { z-index: 490; }
+.day-modal-total {
+  padding: 10px 18px; border-bottom: 1px solid var(--border);
+  font-family: var(--mono); color: var(--green-hi); font-size: 18px; font-weight: 700;
+}
+.day-modal-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.day-modal-row:hover { background: var(--surface-2); }
+.day-modal-type { font-size: 10px; font-weight: 700; min-width: 24px; }
+.day-modal-amt { flex: 1; font-family: var(--mono); font-size: 13px; }
+.day-modal-est { font-size: 10px; color: var(--purple); margin-left: 4px; }
+
 .sym-stats {
   display: flex; gap: 14px; flex-wrap: wrap;
   padding: 12px 18px; border-bottom: 1px solid var(--border);
@@ -475,7 +490,7 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
   }
   .cal-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .cal-cell { min-height: 52px; padding: 2px 2px; }
-  .cal-chip { font-size: 8px; padding: 1px 2px; border-radius: 2px; }
+  .cal-chip { font-size: 8px; padding: 1px 2px; border-radius: 2px; pointer-events: none; }
   .cal-day-num { font-size: 10px; }
   .cal-day-total { font-size: 9px; }
   .cal-legend { gap: 8px; font-size: 11px; }
@@ -484,6 +499,13 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
   /* Add / Import card */
   .add-form { flex-direction: column; align-items: stretch; }
   .field input, #inp-symbol, #inp-shares { width: 100%; }
+
+  /* Day modal — bottom sheet on mobile */
+  #day-modal.modal-overlay { align-items: flex-end; }
+  #day-modal .modal {
+    width: 100%; max-width: 100%; border-radius: 16px 16px 0 0;
+    max-height: 75vh; overflow-y: auto;
+  }
 
   /* Ticker detail modal */
   #sym-modal-body { overflow-x: auto; }

@@ -265,6 +265,21 @@
   </div>
 </div>
 
+<!-- Day detail modal -->
+<div class="modal-overlay hidden" id="day-modal" onclick="if(event.target===this)closeDayModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="day-modal-title" style="font-size:15px"></h3>
+      <button class="btn-icon" onclick="closeDayModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div id="day-modal-body"></div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
