@@ -36,6 +36,7 @@ If `USERS` is omitted, auth is disabled (single-user local mode).
 npm run dev   # development — auto-restarts on file changes
 npm start     # production
 npm test      # run unit tests
+npm run lint  # lint the project
 ```
 
 Then open [http://localhost:3000](http://localhost:3000).

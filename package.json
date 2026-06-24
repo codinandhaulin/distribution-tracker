@@ -7,11 +7,17 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test test/logic.test.js"
+    "test": "node --test test/logic.test.js",
+    "lint": "eslint .",
+    "prepare": "husky"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "husky": "^9.1.7"
   }
 }

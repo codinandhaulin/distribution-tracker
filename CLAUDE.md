@@ -8,6 +8,7 @@ A single-page web app for tracking upcoming brokerage dividend distributions. Bu
 npm run dev   # auto-restarts on file changes (preferred while developing)
 npm start     # production
 npm test      # run unit tests (node:test, no install needed)
+npm run lint  # lint the project
 ```
 
 Then open http://localhost:3000.

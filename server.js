@@ -17,7 +17,9 @@ try {
       const m = line.match(/^([^#\s=][^=]*)=(.*)$/);
       if (m && !process.env[m[1].trim()]) process.env[m[1].trim()] = m[2].trim();
     });
-} catch {}
+} catch {
+  // Ignore missing .env file.
+}
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -55,7 +57,9 @@ function migrateJson() {
       fs.renameSync(path.join(DATA_DIR, f), path.join(DATA_DIR, f + '.migrated'));
       console.log(`  ✓  Migrated portfolio → ${username}`);
     }
-  } catch {}
+  } catch {
+    // Ignore migration failures on first startup.
+  }
 
   // Ticker cache: data/ticker-cache.json
   const cacheFile = path.join(DATA_DIR, 'ticker-cache.json');
@@ -70,7 +74,9 @@ function migrateJson() {
       } catch (err) { db.exec('ROLLBACK'); throw err; }
       fs.renameSync(cacheFile, cacheFile + '.migrated');
       console.log(`  ✓  Migrated ticker cache (${entries.length} entries)`);
-    } catch {}
+    } catch {
+      // Ignore migration failures on first startup.
+    }
   }
 }
 
