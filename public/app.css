@@ -107,7 +107,7 @@ main { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; display: flex
 }
 .card-header h2 { font-size: 13px; font-weight: 600; }
 .card-header-toggle { cursor: pointer; user-select: none; }
-.card-header-toggle:hover h2 { color: var(--fg); }
+.card-header-toggle:hover h2 { color: var(--text); }
 .chevron { transition: transform .18s; display: flex; }
 .chevron.open { transform: rotate(180deg); }
 .add-card-body { border-bottom: none; }
@@ -151,7 +151,7 @@ main { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; display: flex
 .stat-value.loss   { color: var(--red); }
 
 /* ── Table ── */
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-wrap { overflow-x: auto; }
 table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
 thead tr { background: var(--surface-2); }
 th {
@@ -162,8 +162,8 @@ th {
 th.r, td.r { text-align: right; }
 th.hl { color: var(--green); }
 th[data-sort] { cursor: pointer; user-select: none; }
-th[data-sort]:hover { color: var(--fg); }
-th.sort-active { color: var(--accent) !important; }
+th[data-sort]:hover { color: var(--text); }
+th.sort-active { color: var(--blue) !important; }
 .sort-arrow { margin-left: 3px; font-size: .75em; opacity: .7; }
 td {
   padding: 9px 12px; border-bottom: 1px solid rgba(48,54,61,.45);
@@ -340,7 +340,7 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
   margin-top: 5px; font-size: 10px; font-weight: 600; letter-spacing: .03em;
   color: var(--muted); text-transform: uppercase; text-align: center; line-height: 1.3;
 }
-.bar-col.cur-month .bar-lbl { color: var(--fg); }
+.bar-col.cur-month .bar-lbl { color: var(--text); }
 .bar-col.next-year .bar       { background: rgba(56,139,253,.22); }
 .bar-col.next-year:hover .bar { background: rgba(56,139,253,.48); }
 .bar-col.year-break { position: relative; margin-left: 10px; }
@@ -365,8 +365,8 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
 }
 .tip-total { color: var(--green-hi); font-family: var(--mono); }
 .tip-row { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; font-size: 11px; }
-.tip-sym { color: var(--accent); font-family: var(--mono); font-weight: 700; }
-.tip-amt { color: var(--fg); font-family: var(--mono); }
+.tip-sym { color: var(--blue); font-family: var(--mono); font-weight: 700; }
+.tip-amt { color: var(--text); font-family: var(--mono); }
 
 /* ── Login screen ── */
 #login-screen {

@@ -45,40 +45,17 @@ db.exec(`
   );
 `);
 
-// ── Migrations from JSON files (one-time, on first run after upgrade) ─
-function migrateJson() {
-  // Portfolio files: data/portfolio-{username}.json
-  try {
-    for (const f of fs.readdirSync(DATA_DIR).filter(f => f.startsWith('portfolio-') && f.endsWith('.json'))) {
-      const username = f.slice('portfolio-'.length, -'.json'.length);
-      if (db.prepare('SELECT 1 FROM portfolios WHERE username=?').get(username)) continue;
-      const raw = fs.readFileSync(path.join(DATA_DIR, f), 'utf8');
-      db.prepare('INSERT OR IGNORE INTO portfolios (username,tickers) VALUES (?,?)').run(username, raw);
-      fs.renameSync(path.join(DATA_DIR, f), path.join(DATA_DIR, f + '.migrated'));
-      console.log(`  ✓  Migrated portfolio → ${username}`);
-    }
-  } catch {
-    // Ignore migration failures on first startup.
-  }
-
-  // Ticker cache: data/ticker-cache.json
-  const cacheFile = path.join(DATA_DIR, 'ticker-cache.json');
-  if (fs.existsSync(cacheFile) && db.prepare('SELECT COUNT(*) AS n FROM ticker_cache').get().n === 0) {
-    try {
-      const entries = Object.entries(JSON.parse(fs.readFileSync(cacheFile, 'utf8')));
-      const ins = db.prepare('INSERT OR IGNORE INTO ticker_cache (symbol,data,ts) VALUES (?,?,?)');
-      db.exec('BEGIN');
-      try {
-        entries.forEach(([sym, e]) => ins.run(sym, JSON.stringify(e.data), e.ts));
-        db.exec('COMMIT');
-      } catch (err) { db.exec('ROLLBACK'); throw err; }
-      fs.renameSync(cacheFile, cacheFile + '.migrated');
-      console.log(`  ✓  Migrated ticker cache (${entries.length} entries)`);
-    } catch {
-      // Ignore migration failures on first startup.
-    }
-  }
-}
+// ── Prepared statements ───────────────────────────────────────────────
+const stmt = {
+  userGet:        db.prepare('SELECT password_hash FROM users WHERE username=?'),
+  userExists:     db.prepare('SELECT 1 FROM users WHERE username=?'),
+  userInsert:     db.prepare('INSERT OR IGNORE INTO users (username,password_hash) VALUES (?,?)'),
+  userCount:      db.prepare('SELECT COUNT(*) AS n FROM users'),
+  portfolioGet:   db.prepare('SELECT tickers FROM portfolios WHERE username=?'),
+  portfolioUpsert:db.prepare('INSERT OR REPLACE INTO portfolios (username,tickers) VALUES (?,?)'),
+  cacheGet:       db.prepare('SELECT data,ts FROM ticker_cache WHERE symbol=?'),
+  cacheUpsert:    db.prepare('INSERT OR REPLACE INTO ticker_cache (symbol,data,ts) VALUES (?,?,?)'),
+};
 
 // ── Auth setup ────────────────────────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET || (() => {
@@ -93,9 +70,9 @@ async function seedUsers() {
     const i = entry.indexOf(':');
     if (i < 0) continue;
     const username = entry.slice(0, i), password = entry.slice(i + 1);
-    if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) continue;
+    if (stmt.userExists.get(username)) continue;
     const hash = await bcrypt.hash(password, 10);
-    db.prepare('INSERT OR IGNORE INTO users (username,password_hash) VALUES (?,?)').run(username, hash);
+    stmt.userInsert.run(username, hash);
     console.log(`  ✓  Created user: ${username}`);
   }
 }
@@ -118,25 +95,25 @@ function requireAuth(req, res, next) {
 
 // ── Portfolio ─────────────────────────────────────────────────────────
 function readPortfolio(username) {
-  const row = db.prepare('SELECT tickers FROM portfolios WHERE username=?').get(username);
+  const row = stmt.portfolioGet.get(username);
   try { return row ? JSON.parse(row.tickers) : []; } catch { return []; }
 }
 
 function writePortfolio(username, tickers) {
-  db.prepare('INSERT OR REPLACE INTO portfolios (username,tickers) VALUES (?,?)').run(username, JSON.stringify(tickers));
+  stmt.portfolioUpsert.run(username, JSON.stringify(tickers));
 }
 
 // ── Ticker cache ──────────────────────────────────────────────────────
 const CACHE_TTL = 12 * 60 * 60 * 1000; // 12 h
 
 function scGet(symbol) {
-  const row = db.prepare('SELECT data,ts FROM ticker_cache WHERE symbol=?').get(symbol);
+  const row = stmt.cacheGet.get(symbol);
   if (!row || Date.now() - row.ts > CACHE_TTL) return null;
   try { return JSON.parse(row.data); } catch { return null; }
 }
 
 function scSet(symbol, data) {
-  db.prepare('INSERT OR REPLACE INTO ticker_cache (symbol,data,ts) VALUES (?,?,?)').run(symbol, JSON.stringify(data), Date.now());
+  stmt.cacheUpsert.run(symbol, JSON.stringify(data), Date.now());
 }
 
 // ── Polygon ───────────────────────────────────────────────────────────
@@ -285,7 +262,7 @@ app.get('/api/me', (req, res) => {
 app.post('/api/login', async (req, res) => {
   if (!AUTH_ENABLED) return res.json({ username: 'default' });
   const { username, password } = req.body || {};
-  const user = db.prepare('SELECT password_hash FROM users WHERE username=?').get(username);
+  const user = stmt.userGet.get(username);
   if (!user || !(await bcrypt.compare(password || '', user.password_hash)))
     return res.status(401).json({ error: 'Invalid username or password' });
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '7d' });
@@ -326,9 +303,9 @@ app.get('/api/ticker/:symbol', requireAuth, async (req, res) => {
 });
 
 // ── Startup ───────────────────────────────────────────────────────────
-migrateJson();
 await seedUsers();
-AUTH_ENABLED = db.prepare('SELECT COUNT(*) AS n FROM users').get().n > 0;
+const userCount = stmt.userCount.get().n;
+AUTH_ENABLED = userCount > 0;
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -338,7 +315,7 @@ app.listen(PORT, () => {
   else
     console.log('  ✓  POLYGON_KEY configured');
   if (AUTH_ENABLED)
-    console.log(`  ✓  Auth enabled (${db.prepare('SELECT COUNT(*) AS n FROM users').get().n} user(s))`);
+    console.log(`  ✓  Auth enabled (${userCount} user(s))`);
   else
     console.log('  ⚠  No users configured — auth disabled (single-user mode)');
   console.log();

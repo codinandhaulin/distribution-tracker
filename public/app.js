@@ -252,9 +252,11 @@ function projectionParams(d) {
 }
 
 // ── Calendar render ────────────────────────────────────────────────
-const CAL_MONTHS = ['January','February','March','April','May','June',
-                    'July','August','September','October','November','December'];
-const CAL_DOWS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const CAL_MONTHS     = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+const CAL_MONTHS_ABR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CAL_DOWS       = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const CAL_DOWS_FULL  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 function renderCalendar() {
   document.getElementById('cal-month-label').textContent = `${CAL_MONTHS[calMonth]} ${calYear}`;
@@ -570,6 +572,8 @@ function renderSummary() {
   const in7  = new Date(now); in7.setDate(in7.getDate() + 7);
   const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
   let urgent = 0, payout30 = 0, yocSum = 0, yocN = 0, yopSum = 0, yopN = 0;
+  let annualTotal = 0, hasAnnual = false;
+  let mktVal = 0, hasMktVal = false, totalCost = 0, hasCost = false;
 
   for (const { symbol, costBasis, shares } of S.tickers) {
     const d = S.data[symbol]; if (!d) continue;
@@ -577,24 +581,11 @@ function renderSummary() {
     if (ex && ex >= now && ex <= in7)  urgent++;
     if (ex && ex >= now && ex <= in30 && shares && d.distributionAmount > 0) payout30 += shares * d.distributionAmount;
     const r = d.annualDividendRate || 0;
-    if (r > 0 && costBasis)     { yocSum += r / costBasis * 100; yocN++; }
-    if (r > 0 && d.currentPrice){ yopSum += r / d.currentPrice * 100; yopN++; }
-  }
-
-  let annualTotal = 0, hasAnnual = false;
-  for (const { symbol, shares } of S.tickers) {
-    const d = S.data[symbol];
-    if (!d || !shares) continue;
-    annualTotal += (d.annualDividendRate || 0) * shares;
-    hasAnnual = true;
-  }
-
-  let mktVal = 0, hasMktVal = false;
-  let totalCost = 0, hasCost = false;
-  for (const { symbol, costBasis, shares } of S.tickers) {
-    const d = S.data[symbol];
-    if (shares != null && d?.currentPrice) { mktVal    += shares * d.currentPrice; hasMktVal = true; }
-    if (shares != null && costBasis)       { totalCost += shares * costBasis;       hasCost   = true; }
+    if (r > 0 && costBasis)      { yocSum += r / costBasis * 100; yocN++; }
+    if (r > 0 && d.currentPrice) { yopSum += r / d.currentPrice * 100; yopN++; }
+    if (shares) { annualTotal += r * shares; hasAnnual = true; }
+    if (shares != null && d.currentPrice) { mktVal    += shares * d.currentPrice; hasMktVal = true; }
+    if (shares != null && costBasis)      { totalCost += shares * costBasis;       hasCost   = true; }
   }
 
   document.getElementById('s-count').textContent  = count;
@@ -622,7 +613,6 @@ function renderSummary() {
 
 // ── 12-month payout chart ──────────────────────────────────────────
 let chartMonths = [];
-const CAL_MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const fmtBar = v => !v ? '' : v >= 10000 ? `$${(v/1000).toFixed(0)}k` : v >= 1000 ? `$${(v/1000).toFixed(1)}k` : fmt$(v, 0);
 
 function computeMonthlyProjections() {
@@ -677,7 +667,7 @@ function renderChart() {
       <div class="bar-spacer"></div>
       <div class="bar-amt">${fmtBar(m.total)}</div>
       <div class="bar" style="height:${h}px"></div>
-      <div class="bar-lbl">${CAL_MONTHS_SHORT[m.month]}</div>
+      <div class="bar-lbl">${CAL_MONTHS_ABR[m.month]}</div>
     </div>`;
   }).join('');
 }
@@ -741,7 +731,6 @@ function openSymbolModal(symbol) {
     // Show label every N bars so we get ~6-8 visible labels
     const n = allBars.length;
     const step = n <= 6 ? 1 : n <= 12 ? 2 : n <= 20 ? 3 : 4;
-    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     chartHtml = `<div class="sym-section">
       <div class="sym-section-lbl">Distribution / Share — last ${histOldFirst.length} + ${futures.length} projected</div>
@@ -750,7 +739,7 @@ function openSymbolModal(symbol) {
           const h   = b.amount > 0 ? Math.max(Math.round((b.amount - floor) / range * BAR_H), 2) : 0;
           const dt = parseISO(b.date);
           const lbl = (i % step === 0 || i === allBars.length - 1)
-            ? `${MON[dt.getUTCMonth()]} '${String(dt.getUTCFullYear()).slice(2)}`
+            ? `${CAL_MONTHS_ABR[dt.getUTCMonth()]} '${String(dt.getUTCFullYear()).slice(2)}`
             : '';
           const tip = `${b.est ? 'Projected' : 'Actual'} ex-date: ${b.date}\nDist/sh: ${fmt$(b.amount, 4)}`;
           return `<div class="hist-bar-col${b.est ? ' hbc-future' : ''}" title="${tip}">
@@ -765,11 +754,10 @@ function openSymbolModal(symbol) {
 
   // Table: upcoming first, then past (newest→oldest)
   const histNewFirst = d.history || [];
-  const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const shortDate = iso => {
     if (!iso) return '—';
     const dt = parseISO(iso);
-    return `${MONS[dt.getUTCMonth()]} ${dt.getUTCDate()}, ${dt.getUTCFullYear()}`;
+    return `${CAL_MONTHS_ABR[dt.getUTCMonth()]} ${dt.getUTCDate()}, ${dt.getUTCFullYear()}`;
   };
 
   let rows = '';
@@ -835,7 +823,7 @@ function openDayModal(dateStr) {
   if (!evs.length) return;
 
   const dt = parseISO(dateStr);
-  const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getUTCDay()];
+  const dayName = CAL_DOWS_FULL[dt.getUTCDay()];
   document.getElementById('day-modal-title').textContent =
     `${dayName}, ${CAL_MONTHS[dt.getUTCMonth()]} ${dt.getUTCDate()}`;
 
@@ -1050,10 +1038,6 @@ async function startApp() {
   toggleAddCard(S.tickers.length === 0);
   render();
 
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeEditModal(); closeSymbolModal(); closeDayModal(); }
-  });
-
   const chartTip = document.getElementById('chart-tip');
   document.getElementById('bar-chart').addEventListener('mouseover', e => {
     const col = e.target.closest('.bar-col[data-idx]');
@@ -1116,6 +1100,10 @@ async function startApp() {
 }
 
 async function init() {
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeEditModal(); closeSymbolModal(); closeDayModal(); }
+  });
+
   try {
     const r = await fetch('/api/me');
     if (!r.ok) {
