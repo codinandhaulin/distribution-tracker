@@ -289,6 +289,11 @@ app.get('/api/config', (_, res) => {
   res.json({ hasKey: !!process.env.POLYGON_KEY });
 });
 
+app.get('/api/version', (_, res) => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+  res.json({ version: pkg.version });
+});
+
 app.get('/api/ticker/:symbol', requireAuth, async (req, res) => {
   const symbol = req.params.symbol.toUpperCase().trim();
   const force  = req.query.force === '1';

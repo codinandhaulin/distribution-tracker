@@ -1105,6 +1105,14 @@ async function init() {
   });
 
   try {
+    const vr = await fetch('/api/version');
+    if (vr.ok) {
+      const v = await vr.json();
+      document.getElementById('footer-version').textContent = `v${v.version}`;
+    }
+  } catch {}
+
+  try {
     const r = await fetch('/api/me');
     if (!r.ok) {
       const ls = document.getElementById('login-screen');

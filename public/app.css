@@ -226,6 +226,13 @@ tbody tr:hover td { background: rgba(33,38,45,.5); }
 
 .mono { font-family: var(--mono); }
 
+/* ── Footer ── */
+footer {
+  max-width: 1500px; margin: 0 auto; padding: 12px 24px;
+  text-align: right; font-size: 11px; color: var(--dim);
+}
+#footer-version { font-family: var(--mono); }
+
 /* ── Modal ── */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.6);
