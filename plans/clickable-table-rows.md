@@ -61,4 +61,4 @@ Add after the existing `tbody tr:last-child td` rule. The existing hover backgro
 - `openSymbolModal` already handles the no-data case gracefully ("No data loaded yet"), so loading/error rows are safe to click.
 - The `.actions` `stopPropagation` + `closest('.actions')` guard in the listener are belt-and-suspenders.
 - Badge `onclick` attributes on lines ~504/549 of `renderRow` may optionally be removed (row click handles it now) but leaving them is harmless.
-- No HTML or server changes needed.
+- No HTML or server changes needed. 
