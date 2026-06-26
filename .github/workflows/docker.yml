@@ -8,11 +8,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -33,16 +35,35 @@ jobs:
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
+      - name: Check if version tag exists
+        id: tag_check
+        run: |
+          if git describe --tags v${{ steps.version.outputs.version }} 2>/dev/null; then
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "Version v${{ steps.version.outputs.version }} already built and pushed"
+          else
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Building new version v${{ steps.version.outputs.version }}"
+          fi
+
       - uses: docker/login-action@v4.1.0
+        if: steps.tag_check.outputs.should_build == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.CR_PAT }}
 
       - uses: docker/build-push-action@v7.0.0
+        if: steps.tag_check.outputs.should_build == 'true'
         with:
           context: .
           push: true
           tags: |
             ghcr.io/codinandhaulin/distribution-tracker:latest
             ghcr.io/codinandhaulin/distribution-tracker:${{ steps.version.outputs.version }}
+
+      - name: Tag version in git
+        if: steps.tag_check.outputs.should_build == 'true'
+        run: |
+          git tag v${{ steps.version.outputs.version }}
+          git push origin v${{ steps.version.outputs.version }}
