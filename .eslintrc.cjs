@@ -5,20 +5,20 @@ module.exports = {
     node: true,
     es2022: true,
   },
-  extends: ['eslint:recommended'],
+  extends: ["eslint:recommended"],
   parserOptions: {
     ecmaVersion: 2022,
-    sourceType: 'module',
+    sourceType: "module",
   },
   rules: {
-    'no-console': 'off',
+    "no-console": "off",
   },
   overrides: [
     {
-      files: ['public/app.js'],
+      files: ["public/app.js"],
       rules: {
-        'no-unused-vars': 'off',
-        'no-empty': 'off',
+        "no-unused-vars": "off",
+        "no-empty": "off",
       },
     },
   ],

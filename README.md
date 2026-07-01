@@ -85,6 +85,7 @@ Set a stable `JWT_SECRET` in `.env`. If it's missing, a random one is generated 
 To run on another machine without building from source, publish the image to a registry first.
 
 **Docker Hub** (1 free private repo):
+
 ```bash
 docker build -t yourusername/distribution-tracker .
 docker push yourusername/distribution-tracker

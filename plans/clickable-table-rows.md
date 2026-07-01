@@ -26,6 +26,7 @@ return `<div class="actions" onclick="event.stopPropagation()">
 **2. Add `data-symbol="${symbol}"` to every `<tr>` in `renderRow()`**
 
 All four row states (loading, error, no-data, full-data):
+
 ```js
 // before
 return `<tr>
@@ -36,9 +37,9 @@ return `<tr data-symbol="${symbol}">
 **3. Add delegated listener in `startApp()`, alongside the existing `#thead-row` listener**
 
 ```js
-document.getElementById('tbody').addEventListener('click', e => {
-  if (e.target.closest('.actions')) return;
-  const row = e.target.closest('tr[data-symbol]');
+document.getElementById("tbody").addEventListener("click", (e) => {
+  if (e.target.closest(".actions")) return;
+  const row = e.target.closest("tr[data-symbol]");
   if (!row) return;
   openSymbolModal(row.dataset.symbol);
 });
@@ -49,7 +50,9 @@ document.getElementById('tbody').addEventListener('click', e => {
 **4. Add pointer cursor for clickable rows**
 
 ```css
-tbody tr[data-symbol] { cursor: pointer; }
+tbody tr[data-symbol] {
+  cursor: pointer;
+}
 ```
 
 Add after the existing `tbody tr:last-child td` rule. The existing hover background highlight already applies — no extra color needed.

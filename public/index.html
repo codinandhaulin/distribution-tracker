@@ -1,306 +1,541 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Distribution Tracker</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="app.css">
-</head>
-<body>
-
-<div id="login-screen">
-  <div class="login-card">
-    <div class="brand">
-      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-        <polyline points="16 7 22 7 22 13"/>
-      </svg>
-      <h2>Distribution Tracker</h2>
-    </div>
-    <div id="login-err" class="login-err" style="display:none"></div>
-    <div class="field">
-      <label>Username</label>
-      <input id="login-user" type="text" autocomplete="username" placeholder="username">
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <input id="login-pass" type="password" autocomplete="current-password" placeholder="password">
-    </div>
-    <button class="btn btn-green" onclick="login()">Sign in</button>
-  </div>
-</div>
-
-<header>
-  <div class="header-inner">
-    <div class="brand">
-      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-        <polyline points="16 7 22 7 22 13"/>
-      </svg>
-      <h1>Distribution Tracker</h1>
-    </div>
-    <div class="header-right">
-      <span id="last-updated"></span>
-      <div class="view-toggle">
-        <button id="btn-view-table" onclick="toggleView('table')">Table</button>
-        <button id="btn-view-cal" class="active" onclick="toggleView('cal')">Calendar</button>
-      </div>
-      <button class="btn" id="btn-refresh" onclick="refreshAll()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-        </svg>
-        <span class="btn-label">Refresh All</span>
-      </button>
-      <div id="user-chip" style="display:none">
-        <span id="user-label"></span>
-        <button class="btn" style="padding:4px 8px;font-size:11px" onclick="logout()">Sign out</button>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Distribution Tracker</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div id="login-screen">
+      <div class="login-card">
+        <div class="brand">
+          <svg
+            class="brand-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+            <polyline points="16 7 22 7 22 13" />
+          </svg>
+          <h2>Distribution Tracker</h2>
+        </div>
+        <div id="login-err" class="login-err" style="display: none"></div>
+        <div class="field">
+          <label>Username</label>
+          <input
+            id="login-user"
+            type="text"
+            autocomplete="username"
+            placeholder="username"
+          />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input
+            id="login-pass"
+            type="password"
+            autocomplete="current-password"
+            placeholder="password"
+          />
+        </div>
+        <button class="btn btn-green" onclick="login()">Sign in</button>
       </div>
     </div>
-  </div>
-</header>
 
-<main>
-
-  <!-- Setup banner -->
-  <div class="setup-banner hidden" id="setup-banner">
-    <h3>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      API Key Required
-    </h3>
-    <p>Distribution Tracker uses <strong>Polygon.io</strong> for live dividend &amp; price data. A free API key is required (no credit card).</p>
-    <ol class="setup-steps">
-      <li>Sign up for free at <a class="setup-link" href="https://polygon.io/" target="_blank">polygon.io</a></li>
-      <li>Copy your API key from the dashboard</li>
-      <li>In the app folder, create a file called <code>.env</code> containing:<br><code>POLYGON_KEY=your_api_key_here</code></li>
-      <li>Restart the server: <code>npm start</code></li>
-    </ol>
-  </div>
-
-  <!-- Add Ticker card (collapsible) -->
-  <div class="card">
-    <div class="card-header card-header-toggle" onclick="toggleAddCard()">
-      <h2>Add / Import</h2>
-      <span class="chevron" id="add-chevron">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </span>
-    </div>
-    <div class="add-card-body" id="add-card-body">
-      <div class="add-form">
-        <div class="field">
-          <label>Ticker</label>
-          <input id="inp-symbol" type="text" placeholder="JEPI" maxlength="12"
-                 oninput="this.value=this.value.toUpperCase()"
-                 onkeydown="if(event.key==='Enter') addTicker()">
+    <header>
+      <div class="header-inner">
+        <div class="brand">
+          <svg
+            class="brand-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+            <polyline points="16 7 22 7 22 13" />
+          </svg>
+          <h1>Distribution Tracker</h1>
         </div>
-        <div class="field">
-          <label>Cost Basis / Share</label>
-          <input id="inp-cost" type="number" placeholder="55.00" min="0.01" step="0.01"
-                 onkeydown="if(event.key==='Enter') addTicker()">
-        </div>
-        <div class="field">
-          <label>Shares <span class="opt">(optional)</span></label>
-          <input id="inp-shares" type="number" placeholder="100" min="0" step="0.001"
-                 onkeydown="if(event.key==='Enter') addTicker()">
-        </div>
-        <button class="btn btn-green" onclick="addTicker()">+ Add</button>
-        <div style="display:flex;align-items:center;gap:10px">
-          <input type="file" id="csv-input" accept=".csv,.txt" style="display:none" onchange="handleCSVFile(this)">
-          <button class="btn" onclick="document.getElementById('csv-input').click()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        <div class="header-right">
+          <span id="last-updated"></span>
+          <div class="view-toggle">
+            <button id="btn-view-table" onclick="toggleView('table')">
+              Table
+            </button>
+            <button
+              id="btn-view-cal"
+              class="active"
+              onclick="toggleView('cal')"
+            >
+              Calendar
+            </button>
+          </div>
+          <button class="btn" id="btn-refresh" onclick="refreshAll()">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path
+                d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+              />
             </svg>
-            Import CSV
+            <span class="btn-label">Refresh All</span>
           </button>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap">
-            <input type="checkbox" id="csv-replace-all"> Replace all
-          </label>
+          <div id="user-chip" style="display: none">
+            <span id="user-label"></span>
+            <button
+              class="btn"
+              style="padding: 4px 8px; font-size: 11px"
+              onclick="logout()"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Setup banner -->
+      <div class="setup-banner hidden" id="setup-banner">
+        <h3>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          API Key Required
+        </h3>
+        <p>
+          Distribution Tracker uses <strong>Polygon.io</strong> for live
+          dividend &amp; price data. A free API key is required (no credit
+          card).
+        </p>
+        <ol class="setup-steps">
+          <li>
+            Sign up for free at
+            <a class="setup-link" href="https://polygon.io/" target="_blank"
+              >polygon.io</a
+            >
+          </li>
+          <li>Copy your API key from the dashboard</li>
+          <li>
+            In the app folder, create a file called
+            <code>.env</code> containing:<br /><code
+              >POLYGON_KEY=your_api_key_here</code
+            >
+          </li>
+          <li>Restart the server: <code>npm start</code></li>
+        </ol>
+      </div>
+
+      <!-- Add Ticker card (collapsible) -->
+      <div class="card">
+        <div class="card-header card-header-toggle" onclick="toggleAddCard()">
+          <h2>Add / Import</h2>
+          <span class="chevron" id="add-chevron">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
+        </div>
+        <div class="add-card-body" id="add-card-body">
+          <div class="add-form">
+            <div class="field">
+              <label>Ticker</label>
+              <input
+                id="inp-symbol"
+                type="text"
+                placeholder="JEPI"
+                maxlength="12"
+                oninput="this.value = this.value.toUpperCase()"
+                onkeydown="if (event.key === 'Enter') addTicker();"
+              />
+            </div>
+            <div class="field">
+              <label>Cost Basis / Share</label>
+              <input
+                id="inp-cost"
+                type="number"
+                placeholder="55.00"
+                min="0.01"
+                step="0.01"
+                onkeydown="if (event.key === 'Enter') addTicker();"
+              />
+            </div>
+            <div class="field">
+              <label>Shares <span class="opt">(optional)</span></label>
+              <input
+                id="inp-shares"
+                type="number"
+                placeholder="100"
+                min="0"
+                step="0.001"
+                onkeydown="if (event.key === 'Enter') addTicker();"
+              />
+            </div>
+            <button class="btn btn-green" onclick="addTicker()">+ Add</button>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <input
+                type="file"
+                id="csv-input"
+                accept=".csv,.txt"
+                style="display: none"
+                onchange="handleCSVFile(this)"
+              />
+              <button
+                class="btn"
+                onclick="document.getElementById('csv-input').click()"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Import CSV
+              </button>
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 5px;
+                  font-size: 12px;
+                  color: var(--muted);
+                  cursor: pointer;
+                  white-space: nowrap;
+                "
+              >
+                <input type="checkbox" id="csv-replace-all" /> Replace all
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary strip -->
+      <div class="summary-strip hidden" id="summary-strip">
+        <div class="summary-row summary-row--top">
+          <div class="stat">
+            <div class="stat-label">Tickers</div>
+            <div class="stat-value" id="s-count">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Ex-Dates ≤ 7 Days</div>
+            <div class="stat-value amber" id="s-urgent">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Payout Due ≤ 30 Days</div>
+            <div class="stat-value" id="s-payout">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Avg Yield on Cost</div>
+            <div class="stat-value green" id="s-yoc">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Avg Yield on Price</div>
+            <div class="stat-value" id="s-yop">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Est. Annual Total</div>
+            <div class="stat-value green" id="s-annual">—</div>
+          </div>
+        </div>
+        <div class="summary-row summary-row--portfolio">
+          <div class="stat">
+            <div class="stat-label">Market Value</div>
+            <div class="stat-value" id="s-mktval">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Total Cost</div>
+            <div class="stat-value" id="s-cost">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Unrealized Gain / Loss</div>
+            <div class="stat-value" id="s-gain">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 12-month payout chart -->
+      <div class="card hidden" id="chart-card">
+        <div class="card-header">
+          <h2>12-Month Payout Forecast</h2>
+          <span
+            class="stat-value green"
+            id="chart-annual-ttl"
+            style="font-size: 14px"
+          ></span>
+        </div>
+        <div class="chart-wrap">
+          <div class="bar-chart" id="bar-chart"></div>
+        </div>
+      </div>
+
+      <!-- Table view -->
+      <div class="card hidden" id="table-card">
+        <div class="card-header">
+          <h2>Upcoming Distributions</h2>
+          <span style="font-size: 11px; color: var(--muted)"
+            >Sorted by ex-date · soonest first</span
+          >
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr id="thead-row"></tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Calendar view -->
+      <div class="card hidden" id="calendar-card">
+        <div class="card-header">
+          <div class="cal-nav">
+            <button class="btn-icon" onclick="calPrev()" title="Previous month">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <h2 id="cal-month-label"></h2>
+            <button class="btn-icon" onclick="calNext()" title="Next month">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+            <button class="cal-today-btn" onclick="calGoToday()">Today</button>
+          </div>
+          <div id="cal-monthly-total"></div>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-legend">
+          <div class="cal-legend-item">
+            <span class="cal-chip chip-ex">EX</span> Ex-date (declared)
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-chip chip-est">EX</span> Ex-date (estimated)
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-chip chip-pay">PAY</span> Pay date (confirmed)
+          </div>
+          <div class="cal-legend-item">
+            <span class="cal-chip chip-pay-est">PAY</span> Pay date (estimated)
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M9 21V9" />
+          <path d="M15 13v4M12 14v3" />
+        </svg>
+        <h3>No tickers added yet</h3>
+        <p>Add a ticker above to start tracking upcoming distributions.</p>
+      </div>
+    </main>
+
+    <footer>
+      <div id="footer-version"></div>
+    </footer>
+
+    <div id="toast"></div>
+    <div id="chart-tip"></div>
+
+    <!-- Edit modal -->
+    <div
+      class="modal-overlay hidden"
+      id="edit-modal"
+      onclick="if (event.target === this) closeEditModal();"
+    >
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modal-title">Edit</h3>
+          <button class="btn-icon" onclick="closeEditModal()">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Cost Basis / Share</label>
+            <input
+              id="modal-cost"
+              type="number"
+              placeholder="55.00"
+              min="0.01"
+              step="0.01"
+              onkeydown="
+                if (event.key === 'Enter') saveEdit();
+                if (event.key === 'Escape') closeEditModal();
+              "
+            />
+          </div>
+          <div class="field">
+            <label>Shares <span class="opt">(optional)</span></label>
+            <input
+              id="modal-shares"
+              type="number"
+              placeholder="100"
+              min="0"
+              step="0.001"
+              onkeydown="
+                if (event.key === 'Enter') saveEdit();
+                if (event.key === 'Escape') closeEditModal();
+              "
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeEditModal()">Cancel</button>
+          <button class="btn btn-green" onclick="saveEdit()">Save</button>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Summary strip -->
-  <div class="summary-strip hidden" id="summary-strip">
-    <div class="summary-row summary-row--top">
-      <div class="stat">
-        <div class="stat-label">Tickers</div>
-        <div class="stat-value" id="s-count">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Ex-Dates ≤ 7 Days</div>
-        <div class="stat-value amber" id="s-urgent">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Payout Due ≤ 30 Days</div>
-        <div class="stat-value" id="s-payout">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Avg Yield on Cost</div>
-        <div class="stat-value green" id="s-yoc">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Avg Yield on Price</div>
-        <div class="stat-value" id="s-yop">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Est. Annual Total</div>
-        <div class="stat-value green" id="s-annual">—</div>
-      </div>
-    </div>
-    <div class="summary-row summary-row--portfolio">
-      <div class="stat">
-        <div class="stat-label">Market Value</div>
-        <div class="stat-value" id="s-mktval">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Total Cost</div>
-        <div class="stat-value" id="s-cost">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Unrealized Gain / Loss</div>
-        <div class="stat-value" id="s-gain">—</div>
+    <!-- Ticker detail modal -->
+    <div
+      class="modal-overlay hidden"
+      id="symbol-modal"
+      onclick="if (event.target === this) closeSymbolModal();"
+    >
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h3 id="sym-modal-title" style="font-size: 15px"></h3>
+          <button class="btn-icon" onclick="closeSymbolModal()">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div
+          id="sym-modal-body"
+          style="max-height: 72vh; overflow-y: auto"
+        ></div>
       </div>
     </div>
-  </div>
 
-  <!-- 12-month payout chart -->
-  <div class="card hidden" id="chart-card">
-    <div class="card-header">
-      <h2>12-Month Payout Forecast</h2>
-      <span class="stat-value green" id="chart-annual-ttl" style="font-size:14px"></span>
-    </div>
-    <div class="chart-wrap">
-      <div class="bar-chart" id="bar-chart"></div>
-    </div>
-  </div>
-
-  <!-- Table view -->
-  <div class="card hidden" id="table-card">
-    <div class="card-header">
-      <h2>Upcoming Distributions</h2>
-      <span style="font-size:11px;color:var(--muted)">Sorted by ex-date · soonest first</span>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr id="thead-row"></tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Calendar view -->
-  <div class="card hidden" id="calendar-card">
-    <div class="card-header">
-      <div class="cal-nav">
-        <button class="btn-icon" onclick="calPrev()" title="Previous month">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </button>
-        <h2 id="cal-month-label"></h2>
-        <button class="btn-icon" onclick="calNext()" title="Next month">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        </button>
-        <button class="cal-today-btn" onclick="calGoToday()">Today</button>
-      </div>
-      <div id="cal-monthly-total"></div>
-    </div>
-    <div class="cal-grid" id="cal-grid"></div>
-    <div class="cal-legend">
-      <div class="cal-legend-item"><span class="cal-chip chip-ex">EX</span> Ex-date (declared)</div>
-      <div class="cal-legend-item"><span class="cal-chip chip-est">EX</span> Ex-date (estimated)</div>
-      <div class="cal-legend-item"><span class="cal-chip chip-pay">PAY</span> Pay date (confirmed)</div>
-      <div class="cal-legend-item"><span class="cal-chip chip-pay-est">PAY</span> Pay date (estimated)</div>
-    </div>
-  </div>
-
-  <!-- Empty state -->
-  <div class="empty-state" id="empty-state">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-      <path d="M3 9h18M9 21V9"/><path d="M15 13v4M12 14v3"/>
-    </svg>
-    <h3>No tickers added yet</h3>
-    <p>Add a ticker above to start tracking upcoming distributions.</p>
-  </div>
-
-</main>
-
-<footer>
-  <div id="footer-version"></div>
-</footer>
-
-<div id="toast"></div>
-<div id="chart-tip"></div>
-
-<!-- Edit modal -->
-<div class="modal-overlay hidden" id="edit-modal" onclick="if(event.target===this)closeEditModal()">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modal-title">Edit</h3>
-      <button class="btn-icon" onclick="closeEditModal()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="field">
-        <label>Cost Basis / Share</label>
-        <input id="modal-cost" type="number" placeholder="55.00" min="0.01" step="0.01"
-               onkeydown="if(event.key==='Enter')saveEdit();if(event.key==='Escape')closeEditModal()">
-      </div>
-      <div class="field">
-        <label>Shares <span class="opt">(optional)</span></label>
-        <input id="modal-shares" type="number" placeholder="100" min="0" step="0.001"
-               onkeydown="if(event.key==='Enter')saveEdit();if(event.key==='Escape')closeEditModal()">
+    <!-- Day detail modal -->
+    <div
+      class="modal-overlay hidden"
+      id="day-modal"
+      onclick="if (event.target === this) closeDayModal();"
+    >
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="day-modal-title" style="font-size: 15px"></h3>
+          <button class="btn-icon" onclick="closeDayModal()">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div id="day-modal-body"></div>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeEditModal()">Cancel</button>
-      <button class="btn btn-green" onclick="saveEdit()">Save</button>
-    </div>
-  </div>
-</div>
 
-<!-- Ticker detail modal -->
-<div class="modal-overlay hidden" id="symbol-modal" onclick="if(event.target===this)closeSymbolModal()">
-  <div class="modal modal-wide">
-    <div class="modal-header">
-      <h3 id="sym-modal-title" style="font-size:15px"></h3>
-      <button class="btn-icon" onclick="closeSymbolModal()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div id="sym-modal-body" style="max-height:72vh;overflow-y:auto"></div>
-  </div>
-</div>
-
-<!-- Day detail modal -->
-<div class="modal-overlay hidden" id="day-modal" onclick="if(event.target===this)closeDayModal()">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="day-modal-title" style="font-size:15px"></h3>
-      <button class="btn-icon" onclick="closeDayModal()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div id="day-modal-body"></div>
-  </div>
-</div>
-
-<script src="app.js"></script>
-</body>
+    <script src="app.js"></script>
+  </body>
 </html>

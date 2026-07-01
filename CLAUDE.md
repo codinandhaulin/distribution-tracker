@@ -71,11 +71,11 @@ ticker_cache  (symbol PK, data TEXT, ts INTEGER)  -- 12h TTL
 
 ## Polygon endpoints used
 
-| Data | Endpoint |
-|------|----------|
-| Price (prev close) | `GET /v2/aggs/ticker/{symbol}/prev` |
-| Dividend history | `GET /v3/reference/dividends?ticker={symbol}&limit=24&order=desc` |
-| Company name | `GET /v3/reference/tickers/{symbol}` |
+| Data               | Endpoint                                                          |
+| ------------------ | ----------------------------------------------------------------- |
+| Price (prev close) | `GET /v2/aggs/ticker/{symbol}/prev`                               |
+| Dividend history   | `GET /v3/reference/dividends?ticker={symbol}&limit=24&order=desc` |
+| Company name       | `GET /v3/reference/tickers/{symbol}`                              |
 
 Dividend and ticker-ref calls use `.catch(() => null)` — price will still show even if those fail.
 
@@ -106,12 +106,14 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 ## UI features
 
 ### Table view
+
 - Sortable columns — click any header to sort asc/desc; active column highlighted with ▲/▼
 - Default sort: upcoming ex-dates first (soonest → furthest → past/missing)
 - Columns: Ticker, Company, Price, Cost/Sh, Shares, Ex-Date, Pay Date, Dist/Sh, Freq, Ann. Rate, Yield/Price, Yield/Cost, Est. Payout, Ann. Payout
 - Ann. Payout = `shares × annualDividendRate` (highlighted column)
 
 ### 12-Month Payout Forecast chart
+
 - Vertical bar chart card between the summary strip and the table/calendar
 - Computes projected pay dates for each ticker for the next 12 months using `occurrencesInMonth()` + pay-date offset
 - Bars scaled against range (max − 80%×min floor) so month-to-month differences are visible
@@ -121,6 +123,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - `computeMonthlyProjections()` attributes amounts to the **pay-date month** (not ex-date month)
 
 ### Calendar view
+
 - 8-column CSS grid (7 days + week total column)
 - Per-cell chip ordering: pay-date chips first (desc by amount), then ex-date chips
 - Pay chips are slightly larger font (12px) than ex-date chips (10px)
@@ -132,6 +135,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Daily payout total shown top-right of each cell in green mono
 
 ### Add / Import card
+
 - Collapsible — auto-collapsed on load when portfolio exists, auto-expanded when empty
 - Manual add: ticker + cost basis + shares
 - CSV import: auto-detects Fidelity format (`Average Cost Basis` = per-share, `Cost Basis Total` = total)
@@ -147,14 +151,14 @@ npm test   # runs test/logic.test.js via node:test (built-in, no extra install)
 
 69 tests across 6 suites covering the highest-risk pure-logic functions:
 
-| Suite | What it covers |
-|-------|---------------|
-| `occurrencesInMonth` | Monthly/weekly/quarterly/annual funds; anchor-in-future rewind; zero-hit months |
-| `projectFutureDates` | Date spacing, pay-offset, `isEstimated` propagation, null frequency/ex-date |
-| `parseCSVRow` | Quoted commas, dollar amounts with commas, whitespace trimming, empty fields |
-| `parseNum` | `$1,234.56` → `1234.56`, dashes → null, empty/null input |
-| `mergePositions` | Weighted-average cost basis across duplicate ticker rows (Fidelity margin+cash lots) |
-| CSV header detection | Fidelity column-name regexes for symbol, per-share cost, total cost, skip rows |
+| Suite                | What it covers                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| `occurrencesInMonth` | Monthly/weekly/quarterly/annual funds; anchor-in-future rewind; zero-hit months      |
+| `projectFutureDates` | Date spacing, pay-offset, `isEstimated` propagation, null frequency/ex-date          |
+| `parseCSVRow`        | Quoted commas, dollar amounts with commas, whitespace trimming, empty fields         |
+| `parseNum`           | `$1,234.56` → `1234.56`, dashes → null, empty/null input                             |
+| `mergePositions`     | Weighted-average cost basis across duplicate ticker rows (Fidelity margin+cash lots) |
+| CSV header detection | Fidelity column-name regexes for symbol, per-share cost, total cost, skip rows       |
 
 **Important:** the test file inlines copies of the functions from `public/app.js` (browser globals can't be imported). When you change a logic function in `app.js`, update the matching copy in `test/logic.test.js` too.
 
@@ -173,12 +177,14 @@ npm test   # runs test/logic.test.js via node:test (built-in, no extra install)
 **Plans:** Design/planning documents are saved in `plans/` in the repo root. Save each plan there (in addition to the Claude plan file) so decisions are captured in git history.
 
 **How Martin likes to work:**
+
 - Keep solutions simple — this is a personal tool, not a production codebase. Prefer editing existing functions over adding new abstraction layers. Three similar lines beats a premature helper.
 - Update CLAUDE.md **and README.md** continuously after every meaningful change, not just at end of session.
 - If Martin says "respond with TEXT ONLY and not call any tools" — obey literally, no tool calls for that response. He uses this during sensitive operations (e.g. mid-import when 429 errors are flying).
 - When proposing UI changes, give 2–3 concrete options with a clear recommendation before building. Martin will say "yes" or redirect.
 
 **Fidelity CSV format (already handled in code):**
+
 - Column `Average Cost Basis` = per-share cost (not total)
 - Column `Cost Basis Total` = total cost (divide by quantity for per-share)
 - `SPAXX**` (money market sweep) has no quantity/cost and is auto-skipped
