@@ -384,6 +384,7 @@ app.get("/api/queue", (_, res) => {
   res.json({
     pending: polyQueue.length,
     current: polyCurrent,
+    total: (polyCurrent ? 1 : 0) + polyQueue.length,
     nextInMs: polyLastAt
       ? Math.max(0, POLY_INTERVAL - (Date.now() - polyLastAt))
       : 0,

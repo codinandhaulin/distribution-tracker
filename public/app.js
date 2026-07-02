@@ -124,7 +124,7 @@ const FREQ_LABEL = {
 };
 const freqLabel = (f) => FREQ_LABEL[f] || `×${f}/yr`;
 const pendingTickers = () =>
-  S.tickers.filter((t) => S.loading[t.symbol]).length;
+  S.tickers.filter((t) => !S.data[t.symbol] && !S.errors[t.symbol]).length;
 
 // ── API ────────────────────────────────────────────────────────────
 // Server handles caching and Polygon rate limiting via a queue.
@@ -161,7 +161,7 @@ async function fetchTicker(
 // ── Server queue status card ──────────────────────────────────────
 function renderQueueCard(q) {
   const card = document.getElementById("queue-card");
-  if (!q.current && q.pending === 0) {
+  if (!q.total) {
     card.classList.add("hidden");
     return;
   }
@@ -171,7 +171,7 @@ function renderQueueCard(q) {
     : "Waiting for rate limit";
   const secs = Math.ceil(q.nextInMs / 1000);
   document.getElementById("queue-position").textContent =
-    `${q.pending} pending${secs > 0 ? ` · next in ~${secs}s` : ""}`;
+    `${q.total} to process${secs > 0 ? ` · next in ~${secs}s` : ""}`;
 }
 
 async function pollQueue() {

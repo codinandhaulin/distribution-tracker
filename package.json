@@ -1,6 +1,6 @@
 {
   "name": "distribution-tracker",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Track upcoming brokerage distributions",
   "type": "module",
   "main": "server.js",
