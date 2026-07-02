@@ -269,7 +269,8 @@ async function fetchFromPolygon(symbol) {
 // are open simultaneously.
 const POLY_INTERVAL = 30000; // ms between uncached fetches (3 calls each)
 let polyLastAt = 0,
-  polyRunning = false;
+  polyRunning = false,
+  polyCurrent = null;
 const polyQueue = []; // {symbol, force, resolve, reject}
 
 function polyEnqueue(symbol, force) {
@@ -306,6 +307,7 @@ async function drainPolyQueue() {
         await new Promise((r) => setTimeout(r, wait));
       }
       const { symbol, resolve, reject } = polyQueue.shift();
+      polyCurrent = symbol;
       try {
         polyLastAt = Date.now();
         console.log(`  [polygon] fetching ${symbol}`);
@@ -314,6 +316,8 @@ async function drainPolyQueue() {
         resolve(data);
       } catch (err) {
         reject(err);
+      } finally {
+        polyCurrent = null;
       }
     }
   } finally {
@@ -373,6 +377,16 @@ app.get("/api/version", (_, res) => {
     fs.readFileSync(path.join(__dirname, "package.json"), "utf8"),
   );
   res.json({ version: pkg.version });
+});
+
+app.get("/api/queue", (_, res) => {
+  res.json({
+    pending: polyQueue.length,
+    current: polyCurrent,
+    nextInMs: polyLastAt
+      ? Math.max(0, POLY_INTERVAL - (Date.now() - polyLastAt))
+      : 0,
+  });
 });
 
 app.get("/api/ticker/:symbol", requireAuth, async (req, res) => {

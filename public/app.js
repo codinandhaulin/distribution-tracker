@@ -11,7 +11,6 @@ let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth(); // 0-indexed
 let _editSym = null;
 let currentUser = null;
-let _statusTimer = null;
 let calEvents = {};
 
 const parseISO = (s) => new Date(s + "T12:00:00Z");
@@ -140,18 +139,7 @@ async function fetchTicker(
   S.errors[symbol] = null;
   if (!silent) {
     render();
-    clearInterval(_statusTimer);
-    let secs = 0;
-    const QUEUE_INTERVAL = 30;
-    const label = () => {
-      const remaining = Math.max(0, QUEUE_INTERVAL - secs);
-      return `⟳ Fetching ${symbol}${progress ? " " + progress : ""} · next in ~${remaining}s`;
-    };
-    setStatus(label(), true);
-    _statusTimer = setInterval(() => {
-      secs++;
-      setStatus(label(), true);
-    }, 1000);
+    setStatus(`⟳ Fetching ${symbol}${progress ? " " + progress : ""}`, true);
   }
   try {
     const url = `/api/ticker/${encodeURIComponent(symbol)}${force ? "?force=1" : ""}`;
@@ -164,9 +152,31 @@ async function fetchTicker(
     S.data[symbol] = null;
     S.errors[symbol] = e.message;
   }
-  clearInterval(_statusTimer);
   S.loading[symbol] = false;
   if (!silent) render();
+}
+
+// ── Server queue status card ──────────────────────────────────────
+function renderQueueCard(q) {
+  const card = document.getElementById("queue-card");
+  if (!q.current && q.pending === 0) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  document.getElementById("queue-symbol").textContent = q.current
+    ? `Fetching ${q.current}`
+    : "Waiting for rate limit";
+  const secs = Math.ceil(q.nextInMs / 1000);
+  document.getElementById("queue-position").textContent =
+    `${q.pending} pending${secs > 0 ? ` · next in ~${secs}s` : ""}`;
+}
+
+async function pollQueue() {
+  try {
+    const q = await fetch("/api/queue").then((r) => r.json());
+    renderQueueCard(q);
+  } catch {}
 }
 
 // ── Actions ────────────────────────────────────────────────────────
@@ -1419,6 +1429,9 @@ async function handleCSVFile(input) {
 
 // ── Init ───────────────────────────────────────────────────────────
 async function startApp() {
+  setInterval(pollQueue, 2000);
+  pollQueue();
+
   await hydrate();
   toggleAddCard(S.tickers.length === 0);
   render();

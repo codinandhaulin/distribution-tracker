@@ -90,6 +90,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - **Refresh All** button only re-fetches tickers whose cache entry is stale (>12h old) — safe to click anytime
 - Client-side `batchFetch()` is sequential (no explicit delay) — server response time is the natural pacing
 - Page-load uses `Promise.all` (parallel requests) — cache hits all return instantly; queue handles any cold tickers
+- **`GET /api/queue`** exposes live queue state (`pending`, `current` symbol, `nextInMs`); client polls it every 2s and renders a queue-status card (see UI features below) — this is shared server state, so all connected browsers see the same progress, not just the tab that triggered the fetch
 
 ## Key decisions
 
@@ -104,6 +105,12 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - **Alpaca considered, not adopted**: Alpaca's free tier lacks reliable dividend history for the ETF/CEF universe this app tracks.
 
 ## UI features
+
+### Queue status card
+
+- Shown at the top of `<main>` whenever the server's Polygon queue is active (hidden when idle)
+- Polls `GET /api/queue` every 2s; displays the ticker currently fetching, count pending, and seconds until next fetch
+- Replaces the old header-only "~30s" countdown, which was a client-side guess local to the tab that triggered the fetch — this card reflects real shared server state, visible in every open browser tab
 
 ### Table view
 
