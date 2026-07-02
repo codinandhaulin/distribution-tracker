@@ -179,6 +179,7 @@ async function polyGetRetry(endpoint) {
 }
 
 function estimateNextExDate(lastDate, frequency) {
+  if (!lastDate || !frequency) return null;
   const days =
     { 52: 7, 12: 30, 4: 91, 2: 182, 1: 365 }[frequency] ||
     Math.round(365 / frequency);
@@ -222,7 +223,7 @@ function shapeTickerData(
     isEstimated = true;
     const lastEx = past[0].ex_dividend_date,
       lastPay = past[0].pay_date;
-    if (lastEx && lastPay) {
+    if (exDividendDate && lastEx && lastPay) {
       const off = Math.round(
         (new Date(lastPay + "T12:00:00Z") - new Date(lastEx + "T12:00:00Z")) /
           86400000,

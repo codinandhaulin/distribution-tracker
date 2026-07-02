@@ -123,6 +123,8 @@ const FREQ_LABEL = {
   1: "Annual",
 };
 const freqLabel = (f) => FREQ_LABEL[f] || `×${f}/yr`;
+const pendingTickers = () =>
+  S.tickers.filter((t) => S.loading[t.symbol]).length;
 
 // ── API ────────────────────────────────────────────────────────────
 // Server handles caching and Polygon rate limiting via a queue.
@@ -1234,6 +1236,10 @@ function render() {
     .getElementById("calendar-card")
     .classList.toggle("hidden", !has || !calView);
   if (!has) return;
+  const pending = pendingTickers();
+  const pendingText = pending > 0 ? `⟳ ${pending}` : "";
+  document.getElementById("cal-loading").textContent = pendingText;
+  document.getElementById("s-count-loading").textContent = pendingText;
   renderSummary();
   renderChart();
   if (calView) renderCalendar();
@@ -1496,17 +1502,18 @@ async function startApp() {
   } catch {}
 
   if (S.tickers.length > 0) {
-    // Show all as loading immediately, then fire parallel fetches silently.
-    // Each resolves independently; a single render after Promise.all settles.
+    // Show all as loading immediately, then fire parallel fetches.
+    // Each resolve() triggers render() for progressive fill-in; don't suppress UI.
     // batchFetch (sequential + progress) is reserved for Refresh All and CSV import.
     S.tickers.forEach((t) => {
       S.loading[t.symbol] = true;
     });
     render();
     await Promise.all(
-      S.tickers.map((t) => fetchTicker(t.symbol, false, "", true)),
+      S.tickers.map((t) =>
+        fetchTicker(t.symbol, false, "", true).then(() => render()),
+      ),
     );
-    render();
     setStatus("Updated " + new Date().toLocaleTimeString());
   }
 

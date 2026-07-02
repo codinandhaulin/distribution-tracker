@@ -269,7 +269,10 @@
         <div class="summary-row summary-row--top">
           <div class="stat">
             <div class="stat-label">Tickers</div>
-            <div class="stat-value" id="s-count">—</div>
+            <div class="stat-value">
+              <span id="s-count">—</span>
+              <span id="s-count-loading" style="margin-left: 8px"></span>
+            </div>
           </div>
           <div class="stat">
             <div class="stat-label">Ex-Dates ≤ 7 Days</div>
@@ -359,7 +362,13 @@
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
-            <h2 id="cal-month-label"></h2>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <h2 id="cal-month-label"></h2>
+              <span
+                id="cal-loading"
+                style="font-size: 13px; color: var(--amber-hi)"
+              ></span>
+            </div>
             <button class="btn-icon" onclick="calNext()" title="Next month">
               <svg
                 width="14"
@@ -375,7 +384,7 @@
               </svg>
             </button>
             <button class="cal-today-btn" onclick="calGoToday()">Today</button>
-          </div>
+            </div>
           <div id="cal-monthly-total"></div>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
