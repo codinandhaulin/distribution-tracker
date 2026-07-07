@@ -178,6 +178,26 @@ async function polyGetRetry(endpoint) {
   }
 }
 
+function inferFrequencyFromHistory(divs) {
+  if (!divs?.length || divs.length < 2) return null;
+  const dates = divs
+    .map((d) => new Date(d.ex_dividend_date + "T12:00:00Z"))
+    .filter((d) => !isNaN(d))
+    .sort((a, b) => b - a);
+  if (dates.length < 2) return null;
+
+  const intervals = [];
+  for (let i = 0; i < dates.length - 1; i++) {
+    intervals.push((dates[i] - dates[i + 1]) / 86400000);
+  }
+  const avg = intervals.reduce((sum, v) => sum + v, 0) / intervals.length;
+  if (avg <= 14) return 52;
+  if (avg <= 60) return 12;
+  if (avg <= 120) return 4;
+  if (avg <= 220) return 2;
+  return 1;
+}
+
 function estimateNextExDate(lastDate, frequency) {
   if (!lastDate || !frequency) return null;
   const days =
@@ -195,6 +215,7 @@ function shapeTickerData(
   prevClose,
   divResp,
   tickerRef,
+  source = "polygon",
   today = new Date().toISOString().split("T")[0],
 ) {
   const price = prevClose?.results?.[0]?.c;
@@ -210,7 +231,8 @@ function shapeTickerData(
   const past = allDivs.filter((d) => d.ex_dividend_date <= today);
   const next = future.length ? future[future.length - 1] : null;
 
-  const frequency = allDivs[0]?.frequency ?? null;
+  const rawFrequency = allDivs[0]?.frequency ?? null;
+  const frequency = rawFrequency > 0 ? rawFrequency : inferFrequencyFromHistory(allDivs) ?? null;
   const recentDiv = next || past[0] || null;
   const distAmt = recentDiv?.cash_amount ?? 0;
 
@@ -237,6 +259,7 @@ function shapeTickerData(
   return {
     symbol,
     name,
+    source,
     currentPrice: price,
     annualDividendRate: distAmt && frequency ? distAmt * frequency : 0,
     exDividendDate,
@@ -253,6 +276,32 @@ function shapeTickerData(
   };
 }
 
+async function fetchYahooDividendEvents(symbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    symbol,
+  )}?range=2y&interval=1d&events=div`;
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json, text/javascript, */*; q=0.01",
+      "Accept-Language": "en-US,en;q=0.9",
+      Referer: `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`,
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    },
+  });
+  if (!res.ok) throw new Error(`Yahoo ${res.status}: ${res.statusText}`);
+  const json = await res.json();
+  const events = json.chart?.result?.[0]?.events?.dividends;
+  if (!events) return [];
+  return Object.values(events)
+    .map((e) => ({
+      ex_dividend_date: new Date(e.date * 1000).toISOString().split("T")[0],
+      cash_amount: e.amount,
+      pay_date: null,
+    }))
+    .sort((a, b) => b.ex_dividend_date.localeCompare(a.ex_dividend_date));
+}
+
 async function fetchFromPolygon(symbol) {
   const [prevClose, divResp, tickerRef] = await Promise.all([
     polyGetRetry(`/v2/aggs/ticker/${symbol}/prev`),
@@ -261,7 +310,27 @@ async function fetchFromPolygon(symbol) {
     ).catch(() => null),
     polyGetRetry(`/v3/reference/tickers/${symbol}`).catch(() => null),
   ]);
-  return shapeTickerData(symbol, prevClose, divResp, tickerRef);
+
+  let data = shapeTickerData(symbol, prevClose, divResp, tickerRef);
+  if (!data.exDividendDate && !data.distributionAmount && data.history.length === 0) {
+    try {
+      const yahooDivs = await fetchYahooDividendEvents(symbol);
+      if (yahooDivs.length) {
+        console.log(`  [yahoo] fallback used for ${symbol} (${yahooDivs.length} dividends)`);
+        data = shapeTickerData(
+          symbol,
+          prevClose,
+          { results: yahooDivs },
+          tickerRef,
+          "yahoo",
+        );
+      }
+    } catch (err) {
+      console.log(`  [yahoo] fallback failed for ${symbol}: ${err.message}`);
+    }
+  }
+
+  return data;
 }
 
 // ── Server-side Polygon queue ─────────────────────────────────────────
