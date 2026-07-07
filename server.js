@@ -148,6 +148,9 @@ function scSet(symbol, data) {
 
 // ── Polygon ───────────────────────────────────────────────────────────
 const POLY_BASE = "https://api.polygon.io";
+const YAHOO_RETRY_DELAY = 12000; // ms between Yahoo 429 retries
+const YAHOO_COOLDOWN_MS = 60000; // ms to pause all Yahoo fallback attempts after a 429
+let yahooLast429 = 0;
 
 async function polyGet(endpoint) {
   const key = process.env.POLYGON_KEY;
@@ -176,6 +179,37 @@ async function polyGetRetry(endpoint) {
     await new Promise((r) => setTimeout(r, 65000));
     return polyGet(endpoint);
   }
+}
+
+
+async function yahooGetRetry(url, headers) {
+  const now = Date.now();
+  const sinceLast429 = now - yahooLast429;
+  if (yahooLast429 > 0 && sinceLast429 < YAHOO_COOLDOWN_MS) {
+    const wait = Math.ceil((YAHOO_COOLDOWN_MS - sinceLast429) / 1000);
+    console.log(`  [yahoo] cooldown active — skipping fallback for ${wait}s`);
+    throw new Error("Yahoo 429: Too Many Requests");
+  }
+
+  const delays = [0, YAHOO_RETRY_DELAY];
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (attempt > 0) {
+      console.log(`  [yahoo] rate-limited — retry #${attempt} in ${Math.round(delays[attempt] / 1000)}s…`);
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+    }
+    const res = await fetch(url, { headers });
+    if (res.ok) {
+      if (attempt > 0) {
+        console.log(`  [yahoo] retry #${attempt} succeeded for ${url}`);
+      }
+      return res;
+    }
+    if (res.status !== 429) {
+      throw new Error(`Yahoo ${res.status}: ${res.statusText}`);
+    }
+    yahooLast429 = Date.now();
+  }
+  throw new Error("Yahoo 429: Too Many Requests");
 }
 
 function inferFrequencyFromHistory(divs) {
@@ -280,14 +314,12 @@ async function fetchYahooDividendEvents(symbol) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol,
   )}?range=2y&interval=1d&events=div`;
-  const res = await fetch(url, {
-    headers: {
-      Accept: "application/json, text/javascript, */*; q=0.01",
-      "Accept-Language": "en-US,en;q=0.9",
-      Referer: `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`,
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    },
+  const res = await yahooGetRetry(url, {
+    Accept: "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": "en-US,en;q=0.9",
+    Referer: `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`,
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   });
   if (!res.ok) throw new Error(`Yahoo ${res.status}: ${res.statusText}`);
   const json = await res.json();
@@ -312,7 +344,12 @@ async function fetchFromPolygon(symbol) {
   ]);
 
   let data = shapeTickerData(symbol, prevClose, divResp, tickerRef);
-  if (!data.exDividendDate && !data.distributionAmount && data.history.length === 0) {
+  const historyThreshold =
+    data.frequency === 12 ? 8 : data.frequency === 4 ? 4 : data.frequency === 2 ? 3 : 5;
+  const shouldTryAlternative =
+    data.history.length === 0 || data.history.length < historyThreshold;
+
+  if (shouldTryAlternative && data.source === "polygon") {
     try {
       const yahooDivs = await fetchYahooDividendEvents(symbol);
       if (yahooDivs.length) {

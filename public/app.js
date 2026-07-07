@@ -446,13 +446,17 @@ function renderCalendar() {
     const { intervalDays, payOffset: payOffsetDays } = projectionParams(d);
     const exType = d.isEstimated ? "est" : "ex";
 
+    const currentCalendarMonth =
+      calYear === calNow.getFullYear() && calMonth === calNow.getMonth();
+
     for (const exDate of occurrencesInMonth(
       d.exDividendDate,
       intervalDays,
       calYear,
       calMonth,
     )) {
-      if (exDate < todayStr || histDates.has(exDate)) continue;
+      if (!currentCalendarMonth && (exDate < todayStr || histDates.has(exDate))) continue;
+      if (currentCalendarMonth && histDates.has(exDate)) continue;
       addEv(exDate, symbol, exType);
       const payDate = addDays(parseISO(exDate), payOffsetDays)
         .toISOString()
@@ -718,8 +722,8 @@ function renderRow({ symbol, costBasis, shares }) {
   const badgeHtml = `<span class="badge">${symbol}</span>`;
 
   if (loading)
-    return `<tr data-symbol="${symbol}">
-    <td>${badgeHtml}</td>
+    return `<tr data-symbol="${symbol}" class="row-loading">
+    <td><span class="badge badge-loading">${symbol}</span></td>
     <td colspan="13" class="cell-loading"><span class="spinner"></span>Loading…</td>
     <td>${actionBtns(symbol)}</td></tr>`;
 

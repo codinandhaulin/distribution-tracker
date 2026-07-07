@@ -453,6 +453,16 @@ tbody tr:hover td {
   border-radius: 4px;
   letter-spacing: 0.03em;
 }
+
+.badge-loading {
+  background: rgba(255, 193, 7, 0.14);
+  border-color: rgba(255, 193, 7, 0.35);
+  color: var(--amber-hi);
+}
+
+.row-loading td {
+  background: rgba(255, 193, 7, 0.08);
+}
 .co-name {
   color: var(--muted);
   display: block;
