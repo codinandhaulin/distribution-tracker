@@ -523,6 +523,17 @@ tbody tr:hover td {
   color: var(--red);
   font-size: 12px;
 }
+.cell-note {
+  color: var(--amber-hi);
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 4px;
+  background: rgba(250, 194, 66, 0.12);
+  border: 1px solid rgba(250, 194, 66, 0.24);
+  border-radius: 4px;
+  padding: 3px 6px;
+  display: inline-block;
+}
 .spinner {
   display: inline-block;
   width: 11px;

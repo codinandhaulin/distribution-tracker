@@ -735,6 +735,11 @@ function renderRow({ symbol, costBasis, shares }) {
   const days = daysUntil(data.exDividendDate);
   const upcoming = days !== null && days >= 0;
   const isEst = data.isEstimated;
+  const noDividendData =
+    !data.exDividendDate &&
+    !data.dividendDate &&
+    (!data.distributionAmount || data.distributionAmount <= 0) &&
+    !data.frequency;
 
   let exCell = '<span style="color:var(--dim)">—</span>';
   if (data.exDividendDate) {
@@ -770,9 +775,15 @@ function renderRow({ symbol, costBasis, shares }) {
   const estPay = shares && distAmt ? shares * distAmt : null;
   const annPayout = shares && annRate ? shares * annRate : null;
 
+  const companyHtml = `<span class="co-name" title="${esc(data.name)}">${esc(data.name)}</span>${
+    noDividendData
+      ? '<div class="cell-note">No dividend data available</div>'
+      : ""
+  }`;
+
   return `<tr data-symbol="${symbol}">
     <td><span class="badge">${symbol}</span></td>
-    <td><span class="co-name" title="${esc(data.name)}">${esc(data.name)}</span></td>
+    <td>${companyHtml}</td>
     <td class="r mono">${fmt$(price)}</td>
     <td class="r mono" style="color:var(--muted)">${fmt$(costBasis)}</td>
     <td class="r mono">${shares != null ? fmtN(shares) : '<span style="color:var(--dim)">—</span>'}</td>
