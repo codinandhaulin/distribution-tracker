@@ -155,7 +155,10 @@ async function fetchTicker(
     S.errors[symbol] = e.message;
   }
   S.loading[symbol] = false;
-  if (!silent) render();
+  if (!silent) {
+    render();
+    setStatus("Updated " + new Date().toLocaleTimeString());
+  }
 }
 
 // ── Server queue status card ──────────────────────────────────────
@@ -229,7 +232,7 @@ async function refreshAll() {
   if (!S.tickers.length) return;
   const btn = document.getElementById("btn-refresh");
   btn.disabled = true;
-  await batchFetch(S.tickers);
+  await batchFetch(S.tickers, true);
   btn.disabled = false;
 }
 
@@ -702,7 +705,7 @@ const ICON_X = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stro
 function actionBtns(symbol) {
   return `<div class="actions" onclick="event.stopPropagation()">
     <button class="btn-icon" onclick="openEditModal('${symbol}')" title="Edit">${ICON_EDIT}</button>
-    <button class="btn-icon" onclick="fetchTicker('${symbol}')" title="Refresh">${ICON_REFRESH}</button>
+    <button class="btn-icon" onclick="fetchTicker('${symbol}', true)" title="Refresh">${ICON_REFRESH}</button>
     <button class="btn-icon danger" onclick="removeTicker('${symbol}')" title="Remove">${ICON_X}</button>
   </div>`;
 }
@@ -775,11 +778,13 @@ function renderRow({ symbol, costBasis, shares }) {
   const estPay = shares && distAmt ? shares * distAmt : null;
   const annPayout = shares && annRate ? shares * annRate : null;
 
-  const companyHtml = `<span class="co-name" title="${esc(data.name)}">${esc(data.name)}</span>${
-    noDividendData
-      ? '<div class="cell-note">No dividend data available</div>'
-      : ""
-  }`;
+  const sourceNote = data.source === "yahoo"
+    ? '<div class="cell-note">Dividend data fallback: Yahoo Finance</div>'
+    : noDividendData
+    ? '<div class="cell-note">No dividend data available</div>'
+    : "";
+
+  const companyHtml = `<span class="co-name" title="${esc(data.name)}">${esc(data.name)}</span>${sourceNote}`;
 
   return `<tr data-symbol="${symbol}">
     <td><span class="badge">${symbol}</span></td>
