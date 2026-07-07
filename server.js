@@ -372,9 +372,14 @@ async function fetchFromPolygon(symbol) {
 
 // ── Server-side Polygon queue ─────────────────────────────────────────
 // Serialises all Polygon calls across every connected client so the
-// 5-req/min free-tier limit is respected regardless of how many browsers
-// are open simultaneously.
-const POLY_INTERVAL = 30000; // ms between uncached fetches (3 calls each)
+// Polygon free-tier limit is respected regardless of how many browsers
+// are open simultaneously. We aim to cap total Polygon API hits to
+// `POLY_MAX_PER_MIN` per minute. Each uncached fetch makes an estimated
+// `POLY_EST_CALLS_PER_FETCH` Polygon requests (prev, dividends, ticker ref),
+// so compute the minimum interval between dequeues to stay within quota.
+const POLY_MAX_PER_MIN = Number(process.env.POLY_MAX_PER_MIN) || 5; // hits/minute
+const POLY_EST_CALLS_PER_FETCH = 3; // estimated Polygon calls per uncached fetch
+const POLY_INTERVAL = Math.ceil((60000 * POLY_EST_CALLS_PER_FETCH) / POLY_MAX_PER_MIN);
 let polyLastAt = 0,
   polyRunning = false,
   polyCurrent = null;
