@@ -152,7 +152,55 @@ const YAHOO_RETRY_DELAY = 12000; // ms between Yahoo 429 retries
 const YAHOO_COOLDOWN_MS = 60000; // ms to pause all Yahoo fallback attempts after a 429
 let yahooLast429 = 0;
 
+// Token-bucket to throttle actual Polygon HTTP calls. We track tokens
+// (one token == one Polygon HTTP request). Tokens refill at a steady
+// pace to enforce `POLY_MAX_PER_MIN` across the process.
+const POLY_MAX_PER_MIN = Number(process.env.POLY_MAX_PER_MIN) || 5;
+const POLY_TOKEN_REFILL_MS = Math.floor(60000 / POLY_MAX_PER_MIN) || 12000;
+let polyTokens = POLY_MAX_PER_MIN;
+let polyRefillTimer = null;
+
+function startPolyRefill() {
+  if (polyRefillTimer) return;
+  polyRefillTimer = setInterval(() => {
+    polyTokens = Math.min(polyTokens + 1, POLY_MAX_PER_MIN);
+  }, POLY_TOKEN_REFILL_MS);
+}
+
+function stopPolyRefill() {
+  if (!polyRefillTimer) return;
+  clearInterval(polyRefillTimer);
+  polyRefillTimer = null;
+}
+
+async function acquirePolygonToken() {
+  startPolyRefill();
+  if (polyTokens > 0) {
+    polyTokens -= 1;
+    return;
+  }
+  // Poll until a token becomes available. The interval is small so we
+  // wake quickly once refill adds a token.
+  await new Promise((resolve) => {
+    const iv = setInterval(() => {
+      if (polyTokens > 0) {
+        polyTokens -= 1;
+        clearInterval(iv);
+        resolve();
+      }
+    }, Math.max(250, Math.floor(POLY_TOKEN_REFILL_MS / 4)));
+  });
+}
+
+// Ensure refill timer is cleaned up on process exit
+process.on("exit", stopPolyRefill);
+process.on("SIGINT", () => {
+  stopPolyRefill();
+  process.exit();
+});
+
 async function polyGet(endpoint) {
+  await acquirePolygonToken();
   const key = process.env.POLYGON_KEY;
   if (!key) {
     const e = new Error("POLYGON_KEY not configured");
@@ -377,9 +425,6 @@ async function fetchFromPolygon(symbol) {
 // `POLY_MAX_PER_MIN` per minute. Each uncached fetch makes an estimated
 // `POLY_EST_CALLS_PER_FETCH` Polygon requests (prev, dividends, ticker ref),
 // so compute the minimum interval between dequeues to stay within quota.
-const POLY_MAX_PER_MIN = Number(process.env.POLY_MAX_PER_MIN) || 5; // hits/minute
-const POLY_EST_CALLS_PER_FETCH = 3; // estimated Polygon calls per uncached fetch
-const POLY_INTERVAL = Math.ceil((60000 * POLY_EST_CALLS_PER_FETCH) / POLY_MAX_PER_MIN);
 let polyLastAt = 0,
   polyRunning = false,
   polyCurrent = null;
@@ -411,12 +456,11 @@ async function drainPolyQueue() {
           continue;
         }
       }
-      const wait = POLY_INTERVAL - (Date.now() - polyLastAt);
-      if (polyLastAt > 0 && wait > 0) {
-        console.log(
-          `  [queue] ${polyQueue.length} pending — waiting ${Math.round(wait / 1000)}s`,
-        );
-        await new Promise((r) => setTimeout(r, wait));
+      // No fixed dequeue interval here; the token-bucket in `polyGet`
+      // enforces the true Polygon request rate. Add a small backoff when
+      // the queue is long to avoid a tight busy loop.
+      if (polyLastAt > 0 && polyQueue.length > 1) {
+        await new Promise((r) => setTimeout(r, 200));
       }
       const { symbol, resolve, reject } = polyQueue.shift();
       polyCurrent = symbol;
@@ -496,9 +540,7 @@ app.get("/api/queue", (_, res) => {
     pending: polyQueue.length,
     current: polyCurrent,
     total: (polyCurrent ? 1 : 0) + polyQueue.length,
-    nextInMs: polyLastAt
-      ? Math.max(0, POLY_INTERVAL - (Date.now() - polyLastAt))
-      : 0,
+    nextInMs: polyTokens > 0 ? 0 : POLY_TOKEN_REFILL_MS,
   });
 });
 
