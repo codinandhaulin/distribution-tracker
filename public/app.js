@@ -164,7 +164,9 @@ async function fetchTicker(
 // ── Server queue status card ──────────────────────────────────────
 function renderQueueCard(q) {
   const card = document.getElementById("queue-card");
-  if (!q.total) {
+  const hasWork =
+    q.total > 0 || q.pending > 0 || q.current || q.availableTokens < 5;
+  if (!hasWork) {
     card.classList.add("hidden");
     return;
   }
@@ -173,8 +175,9 @@ function renderQueueCard(q) {
     ? `Fetching ${q.current}`
     : "Waiting for rate limit";
   const secs = Math.ceil(q.nextInMs / 1000);
+  const total = q.total || q.pending || 0;
   document.getElementById("queue-position").textContent =
-    `${q.total} to process${secs > 0 ? ` · next in ~${secs}s` : ""}`;
+    `${total} to process${secs > 0 ? ` · next in ~${secs}s` : ""}`;
 }
 
 async function pollQueue() {
