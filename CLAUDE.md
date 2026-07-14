@@ -83,14 +83,15 @@ Dividend and ticker-ref calls use `.catch(() => null)` — price will still show
 
 Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch makes 3 Polygon calls in parallel, so:
 
-- **Server-side Polygon queue** (`polyEnqueue` / `drainPolyQueue` in `server.js`) serialises all Polygon calls across every connected browser — 30-second spacing between uncached fetches
+- **Server-side Polygon queue** (`polyEnqueue` / `drainPolyQueue` in `server.js`) serialises all Polygon calls across every connected browser; a token bucket (`POLY_MAX_PER_MIN`, default 5) paces the actual HTTP calls. The bucket starts with 1 token (not full) so a cold import can't burst past the per-minute quota and trip a 429
 - Cache hits (SQLite, 12h TTL) bypass the queue and return immediately
 - The server retries a single 429 after a 65-second wait before propagating the error
 - Initial import of a large portfolio (38 tickers) takes ~19 minutes on first cold load; all subsequent loads are instant from cache
 - **Refresh All** button only re-fetches tickers whose cache entry is stale (>12h old) — safe to click anytime
 - Client-side `batchFetch()` is sequential (no explicit delay) — server response time is the natural pacing
 - Page-load uses `Promise.all` (parallel requests) — cache hits all return instantly; queue handles any cold tickers
-- **`GET /api/queue`** exposes live queue state (`pending`, `current` symbol, `nextInMs`); client polls it every 2s and renders a queue-status card (see UI features below) — this is shared server state, so all connected browsers see the same progress, not just the tab that triggered the fetch
+- **`GET /api/queue`** exposes live queue state (`pending`, `current` symbol, `nextInMs`); client polls it every 2s and renders a queue-status card (see UI features below) — this is shared server state, so all connected browsers see the same progress, not just the tab that triggered the fetch. `nextInMs` counts down to the next **ticker** fetch (3 tokens), not the next single token
+- **Yahoo fallback** (`fetchYahooDividendEvents`) fills in dividend history when Polygon returns a sparse set. Yahoo 429s are IP-level penalties that can last hours, so: one attempt per call (no retry), and a shared cooldown that doubles on each consecutive 429 (60s → 30min cap, reset on success). During a Yahoo ban the app still works — Polygon data renders, history is just thinner
 
 ## Key decisions
 
@@ -108,8 +109,9 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 
 ### Queue status card
 
-- Shown at the top of `<main>` whenever the server's Polygon queue is active (hidden when idle)
-- Polls `GET /api/queue` every 2s; displays the ticker currently fetching, count pending, and seconds until next fetch
+- Shown at the top of `<main>` whenever the server's Polygon queue has work (`total > 0`, i.e. a ticker fetching or queued); hidden the moment the queue empties
+- Polls `GET /api/queue` every 2s; displays the ticker currently fetching, count pending, and a "next ticker in ~Xs" countdown (anchored to when the current ticker started + 3 token-refill intervals — bucket level can't be used because active fetches drain each token as it refills)
+- Count shown is `max(server queue total, this tab's pendingTickers())` — `batchFetch()` is sequential so the server only ever sees 1 request at a time; only the importing tab knows how many tickers remain unsent (other tabs show the server count)
 - Replaces the old header-only "~30s" countdown, which was a client-side guess local to the tab that triggered the fetch — this card reflects real shared server state, visible in every open browser tab
 
 ### Table view

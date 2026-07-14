@@ -148,24 +148,28 @@ function scSet(symbol, data) {
 
 // ── Polygon ───────────────────────────────────────────────────────────
 const POLY_BASE = "https://api.polygon.io";
-const YAHOO_RETRY_DELAY = 12000; // ms between Yahoo 429 retries
-const YAHOO_COOLDOWN_MS = 60000; // ms to pause all Yahoo fallback attempts after a 429
+// Yahoo 429s are usually IP-level penalties lasting minutes-to-hours, not
+// transient rate blips. One attempt per call, and the cooldown doubles on
+// every consecutive 429 (60s → 30min cap) so we stop refreshing the penalty.
+const YAHOO_COOLDOWN_MS = 60000;
+const YAHOO_COOLDOWN_MAX_MS = 30 * 60000;
 let yahooLast429 = 0;
+let yahooCooldownMs = YAHOO_COOLDOWN_MS;
 
 // Token-bucket to throttle actual Polygon HTTP calls. We track tokens
 // (one token == one Polygon HTTP request). Tokens refill at a steady
 // pace to enforce `POLY_MAX_PER_MIN` across the process.
 const POLY_MAX_PER_MIN = Number(process.env.POLY_MAX_PER_MIN) || 5;
 const POLY_TOKEN_REFILL_MS = Math.floor(60000 / POLY_MAX_PER_MIN) || 12000;
-let polyTokens = POLY_MAX_PER_MIN;
+// Start with 1 token, not a full bucket: a full bucket plus first-minute
+// refills lets a cold import fire ~2× the per-minute quota and trip a 429. 
+let polyTokens = 1;
 let polyRefillTimer = null;
-let polyLastRefillAt = Date.now();
 
 function startPolyRefill() {
   if (polyRefillTimer) return;
   polyRefillTimer = setInterval(() => {
     polyTokens = Math.min(polyTokens + 1, POLY_MAX_PER_MIN);
-    polyLastRefillAt = Date.now();
   }, POLY_TOKEN_REFILL_MS);
 }
 
@@ -233,33 +237,27 @@ async function polyGetRetry(endpoint) {
 
 
 async function yahooGetRetry(url, headers) {
-  const now = Date.now();
-  const sinceLast429 = now - yahooLast429;
-  if (yahooLast429 > 0 && sinceLast429 < YAHOO_COOLDOWN_MS) {
-    const wait = Math.ceil((YAHOO_COOLDOWN_MS - sinceLast429) / 1000);
+  const sinceLast429 = Date.now() - yahooLast429;
+  if (yahooLast429 > 0 && sinceLast429 < yahooCooldownMs) {
+    const wait = Math.ceil((yahooCooldownMs - sinceLast429) / 1000);
     console.log(`  [yahoo] cooldown active — skipping fallback for ${wait}s`);
     throw new Error("Yahoo 429: Too Many Requests");
   }
 
-  const delays = [0, YAHOO_RETRY_DELAY];
-  for (let attempt = 0; attempt < delays.length; attempt++) {
-    if (attempt > 0) {
-      console.log(`  [yahoo] rate-limited — retry #${attempt} in ${Math.round(delays[attempt] / 1000)}s…`);
-      await new Promise((r) => setTimeout(r, delays[attempt]));
-    }
-    const res = await fetch(url, { headers });
-    if (res.ok) {
-      if (attempt > 0) {
-        console.log(`  [yahoo] retry #${attempt} succeeded for ${url}`);
-      }
-      return res;
-    }
-    if (res.status !== 429) {
-      throw new Error(`Yahoo ${res.status}: ${res.statusText}`);
-    }
-    yahooLast429 = Date.now();
+  const res = await fetch(url, { headers });
+  if (res.ok) {
+    yahooLast429 = 0;
+    yahooCooldownMs = YAHOO_COOLDOWN_MS;
+    return res;
   }
-  throw new Error("Yahoo 429: Too Many Requests");
+  if (res.status === 429) {
+    yahooCooldownMs = yahooLast429
+      ? Math.min(yahooCooldownMs * 2, YAHOO_COOLDOWN_MAX_MS)
+      : YAHOO_COOLDOWN_MS;
+    yahooLast429 = Date.now();
+    console.log(`  [yahoo] 429 — cooling down ${Math.round(yahooCooldownMs / 1000)}s`);
+  }
+  throw new Error(`Yahoo ${res.status}: ${res.statusText}`);
 }
 
 function inferFrequencyFromHistory(divs) {
@@ -537,8 +535,16 @@ app.get("/api/version", (_, res) => {
   res.json({ version: pkg.version });
 });
 
+const POLY_CALLS_PER_FETCH = 3; // prev close + dividends + ticker ref
+
 app.get("/api/queue", (_, res) => {
-  const nextInMs = polyTokens > 0 ? 0 : Math.max(0, POLY_TOKEN_REFILL_MS - (Date.now() - polyLastRefillAt));
+  // Countdown to the next *ticker* fetch. While a fetch is active its calls
+  // grab each token as it refills, so the bucket never accumulates — anchor
+  // to when the current ticker started instead: it consumes
+  // POLY_CALLS_PER_FETCH tokens, so the next one starts ~that many refills later.
+  const nextInMs = polyCurrent
+    ? Math.max(0, polyLastAt + POLY_CALLS_PER_FETCH * POLY_TOKEN_REFILL_MS - Date.now())
+    : 0;
   res.json({
     pending: polyQueue.length,
     current: polyCurrent,

@@ -164,9 +164,7 @@ async function fetchTicker(
 // ── Server queue status card ──────────────────────────────────────
 function renderQueueCard(q) {
   const card = document.getElementById("queue-card");
-  const hasWork =
-    q.total > 0 || q.pending > 0 || q.current || q.availableTokens < 5;
-  if (!hasWork) {
+  if (q.total === 0) {
     card.classList.add("hidden");
     return;
   }
@@ -175,9 +173,11 @@ function renderQueueCard(q) {
     ? `Fetching ${q.current}`
     : "Waiting for rate limit";
   const secs = Math.ceil(q.nextInMs / 1000);
-  const total = q.total || q.pending || 0;
+  // batchFetch is sequential, so the server only sees 1 request at a time —
+  // this tab's own unfetched tickers are the real remaining count.
+  const total = Math.max(q.total, pendingTickers());
   document.getElementById("queue-position").textContent =
-    `${total} to process${secs > 0 ? ` · next in ~${secs}s` : ""}`;
+    `${total} to process${secs > 0 ? ` · next ticker in ~${secs}s` : ""}`;
 }
 
 async function pollQueue() {
