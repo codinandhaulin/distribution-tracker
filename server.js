@@ -159,11 +159,13 @@ const POLY_MAX_PER_MIN = Number(process.env.POLY_MAX_PER_MIN) || 5;
 const POLY_TOKEN_REFILL_MS = Math.floor(60000 / POLY_MAX_PER_MIN) || 12000;
 let polyTokens = POLY_MAX_PER_MIN;
 let polyRefillTimer = null;
+let polyLastRefillAt = Date.now();
 
 function startPolyRefill() {
   if (polyRefillTimer) return;
   polyRefillTimer = setInterval(() => {
     polyTokens = Math.min(polyTokens + 1, POLY_MAX_PER_MIN);
+    polyLastRefillAt = Date.now();
   }, POLY_TOKEN_REFILL_MS);
 }
 
@@ -536,11 +538,13 @@ app.get("/api/version", (_, res) => {
 });
 
 app.get("/api/queue", (_, res) => {
+  const nextInMs = polyTokens > 0 ? 0 : Math.max(0, POLY_TOKEN_REFILL_MS - (Date.now() - polyLastRefillAt));
   res.json({
     pending: polyQueue.length,
     current: polyCurrent,
     total: (polyCurrent ? 1 : 0) + polyQueue.length,
-    nextInMs: polyTokens > 0 ? 0 : POLY_TOKEN_REFILL_MS,
+    availableTokens: polyTokens,
+    nextInMs,
   });
 });
 
