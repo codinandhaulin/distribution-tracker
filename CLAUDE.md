@@ -141,7 +141,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - Pay chips are slightly larger font (12px) than ex-date chips (10px)
 - Chip colors: red = declared ex-date, purple = estimated ex-date, green = confirmed pay date, grey/italic = estimated pay date
 - Weekly subtotals and monthly total shown
-- Pay chips show inline delta vs prior distribution: `▲6.2%` (green) or `▼3.1%` (red) when a prior exists; tooltip shows per-share dollar detail ("Prev: $0.48/sh → $0.51/sh (+6.2%)")
+- Pay chips show inline delta vs the immediately preceding payment, actual **or** estimated: `▲6.2%` (green) or `▼3.1%` (red); tooltip shows per-share dollar detail ("Prev: $0.48/sh → $0.51/sh (+6.2%)"). Only the first projected payment compares against the last actual; later projections compare to the estimate before them (same amount → no arrow), so a one-time change isn't repeated on every future month
 - Today's date number rendered as blue filled circle
 - Same-ticker pay events on same date merged (`addEv()` sums amounts and perShare)
 - Daily payout total shown top-right of each cell in green mono

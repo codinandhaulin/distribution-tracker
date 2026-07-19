@@ -468,7 +468,17 @@ function renderCalendar() {
         .split("T")[0];
       const payAmt =
         d.distributionAmount && shares ? shares * d.distributionAmount : null;
-      const prevPerSh = hist[0]?.amount ?? null;
+      // Compare to the immediately preceding payment, actual OR estimated:
+      // if another projected occurrence (one interval back, on/after the
+      // anchor next-ex) sits before this one, that estimate is the previous
+      // payment — only the first projection compares against the last actual.
+      const prevExDate = addDays(parseISO(exDate), -intervalDays)
+        .toISOString()
+        .split("T")[0];
+      const prevPerSh =
+        prevExDate >= d.exDividendDate
+          ? (d.distributionAmount ?? null)
+          : (hist[0]?.amount ?? null);
       addEv(
         payDate,
         symbol,
