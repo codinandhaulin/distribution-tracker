@@ -859,3 +859,71 @@ describe("shapeTickerData", () => {
     assert.equal(r.exDividendDate, "2026-07-01");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cache freshness — kept in sync with server.js
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DIV_FALLBACK_TTL = 7 * 24 * 60 * 60 * 1000;
+
+function lastMarketCloseMs(now = Date.now()) {
+  const et = new Date(
+    new Date(now).toLocaleString("en-US", { timeZone: "America/New_York" }),
+  );
+  const close = new Date(et);
+  close.setHours(16, 30, 0, 0);
+  if (et < close) close.setDate(close.getDate() - 1);
+  while (close.getDay() === 0 || close.getDay() === 6)
+    close.setDate(close.getDate() - 1);
+  return now - (et - close);
+}
+
+function priceFresh(ts, now = Date.now()) {
+  return ts >= lastMarketCloseMs(now);
+}
+
+function divsFresh(data, ts, now = Date.now()) {
+  if (data.exDividendDate) {
+    const today = new Date(now).toISOString().split("T")[0];
+    return today <= data.exDividendDate;
+  }
+  return now - (data.divTs ?? ts) < DIV_FALLBACK_TTL;
+}
+
+describe("cache freshness (server)", () => {
+  // Wed 2026-07-15 (a weekday). ET is UTC-4 in July, so 16:30 ET = 20:30 UTC.
+  const wedNoon = Date.parse("2026-07-15T16:00:00Z"); // noon ET, before close
+  const wedEve = Date.parse("2026-07-15T22:00:00Z"); // 6pm ET, after close
+  const tueEve = Date.parse("2026-07-14T22:00:00Z");
+  const sunNoon = Date.parse("2026-07-12T16:00:00Z");
+  const friEve = Date.parse("2026-07-10T22:00:00Z");
+
+  test("price fetched after yesterday's close is fresh before today's close", () => {
+    assert.equal(priceFresh(tueEve, wedNoon), true);
+  });
+
+  test("price fetched before today's close is stale after it", () => {
+    assert.equal(priceFresh(wedNoon, wedEve), false);
+  });
+
+  test("price fetched Friday evening stays fresh all weekend", () => {
+    assert.equal(priceFresh(friEve, sunNoon), true);
+  });
+
+  test("dividends fresh while next ex-date has not passed", () => {
+    assert.equal(divsFresh({ exDividendDate: "2026-07-20" }, 0, wedNoon), true);
+  });
+
+  test("dividends fresh on the ex-date itself, stale the day after", () => {
+    assert.equal(divsFresh({ exDividendDate: "2026-07-15" }, 0, wedNoon), true);
+    assert.equal(divsFresh({ exDividendDate: "2026-07-14" }, 0, wedNoon), false);
+  });
+
+  test("no ex-date: 7-day fallback on divTs (or row ts)", () => {
+    const d6 = wedNoon - 6 * 86400000;
+    const d8 = wedNoon - 8 * 86400000;
+    assert.equal(divsFresh({}, d6, wedNoon), true);
+    assert.equal(divsFresh({}, d8, wedNoon), false);
+    assert.equal(divsFresh({ divTs: d6 }, d8, wedNoon), true);
+  });
+});

@@ -235,7 +235,9 @@ async function refreshAll() {
   if (!S.tickers.length) return;
   const btn = document.getElementById("btn-refresh");
   btn.disabled = true;
-  await batchFetch(S.tickers, true);
+  // No force: the server refetches only what's stale (price after market
+  // close, dividends after the next ex-date passes) — fresh entries are free.
+  await batchFetch(S.tickers);
   btn.disabled = false;
 }
 
@@ -1540,7 +1542,8 @@ async function startApp() {
     setStatus("Updated " + new Date().toLocaleTimeString());
   }
 
-  // Auto-refresh every 12 hours — matches the server-side cache TTL
+  // Auto-refresh every 12 hours — picks up new closing prices; server
+  // freshness rules make it a no-op when nothing is stale
   setInterval(refreshAll, 12 * 60 * 60 * 1000);
 }
 

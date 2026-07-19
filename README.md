@@ -116,5 +116,6 @@ docker compose up -d
 
 ## Notes
 
-- First cold load is slow on Polygon's free tier (~30s per uncached ticker due to 5 req/min rate limit). All subsequent loads are instant from the 12-hour cache.
+- First cold load is slow on Polygon's free tier (~30s per uncached ticker due to 5 req/min rate limit). After that the cache does the work: prices refresh once per trading day (after market close, 1 API call per ticker), and dividend history is only refetched once the next expected ex-date has passed.
+- When Polygon has no confirmed upcoming dividend, the server checks dividendhistory.org for the fund's published calendar (upcoming ex/pay dates), falling back to a naive frequency-based estimate if that fails.
 - Mutual funds without exchange listings (e.g. FNILX) will fail Polygon lookup — remove them manually.

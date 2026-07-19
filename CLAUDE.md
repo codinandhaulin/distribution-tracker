@@ -66,7 +66,7 @@ data/
 ```sql
 users         (username PK, password_hash)
 portfolios    (username PK, tickers TEXT)   -- JSON array of {symbol, costBasis, shares}
-ticker_cache  (symbol PK, data TEXT, ts INTEGER)  -- 12h TTL
+ticker_cache  (symbol PK, data TEXT, ts INTEGER)  -- split freshness, see Rate limiting
 ```
 
 ## Polygon endpoints used
@@ -84,13 +84,16 @@ Dividend and ticker-ref calls use `.catch(() => null)` — price will still show
 Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch makes 3 Polygon calls in parallel, so:
 
 - **Server-side Polygon queue** (`polyEnqueue` / `drainPolyQueue` in `server.js`) serialises all Polygon calls across every connected browser; a token bucket (`POLY_MAX_PER_MIN`, default 5) paces the actual HTTP calls. The bucket starts with 1 token (not full) so a cold import can't burst past the per-minute quota and trip a 429
-- Cache hits (SQLite, 12h TTL) bypass the queue and return immediately
+- **Split cache freshness** (no flat TTL): _price_ is fresh until the most recent market close (weekday ~16:30 ET, holidays ignored — `lastMarketCloseMs()`); _dividend history_ is immutable, so it's fresh until the cached next ex-date passes (7-day fallback via `divTs` when no ex-date is known). Fully fresh entries bypass the queue and return immediately
+- **Price-only refresh**: when dividends are fresh but the price is stale, `fetchTickerSmart()` fetches only prev-close (1 Polygon call instead of 3) and merges it into the cached blob — a daily full-portfolio refresh costs 38 calls (~8 min), not 114 (~23 min)
+- The server-side cache is keyed by symbol only — replacing or re-importing the portfolio never discards it
 - The server retries a single 429 after a 65-second wait before propagating the error
 - Initial import of a large portfolio (38 tickers) takes ~19 minutes on first cold load; all subsequent loads are instant from cache
-- **Refresh All** button only re-fetches tickers whose cache entry is stale (>12h old) — safe to click anytime
+- **Refresh All** button (and the 12h auto-refresh timer) sends no `force` flag — the server refetches only what's stale, so it's safe to click anytime and free when nothing changed. The per-row refresh button still sends `force=1` for a true full refetch of that ticker
 - Client-side `batchFetch()` is sequential (no explicit delay) — server response time is the natural pacing
 - Page-load uses `Promise.all` (parallel requests) — cache hits all return instantly; queue handles any cold tickers
 - **`GET /api/queue`** exposes live queue state (`pending`, `current` symbol, `nextInMs`); client polls it every 2s and renders a queue-status card (see UI features below) — this is shared server state, so all connected browsers see the same progress, not just the tab that triggered the fetch. `nextInMs` counts down to the next **ticker** fetch (3 tokens), not the next single token
+- **dividendhistory.org fallback** (`fetchDHUpcoming`): when the next ex-date would be an estimate (`isEstimated` — Polygon/Yahoo have no confirmed future dividend), the server scrapes the embedded `data-dividend-chart-json` blob from `dividendhistory.org/payout/{symbol}/` and uses its nearest upcoming row (type `"u"`) for ex/pay dates and amount. Their estimates follow the fund's published calendar (same-month-last-year pattern), so they nail irregular schedules (NEOS, YieldMax) where +30-day math skips or misses months. Still flagged `isEstimated` in the UI. One attempt, 10s timeout, non-fatal on failure; only hit when dividend data is refetched, so a few requests/day. Not all tickers covered (e.g. FBTC, ROM 404) — naive estimate kept as fallback
 - **Yahoo fallback** (`fetchYahooDividendEvents`) fills in dividend history when Polygon returns a sparse set. Yahoo 429s are IP-level penalties that can last hours, so: one attempt per call (no retry), and a shared cooldown that doubles on each consecutive 429 (60s → 30min cap, reset on success). During a Yahoo ban the app still works — Polygon data renders, history is just thinner
 
 ## Key decisions
@@ -158,7 +161,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 npm test   # runs test/logic.test.js via node:test (built-in, no extra install)
 ```
 
-69 tests across 6 suites covering the highest-risk pure-logic functions:
+101 tests across 10 suites covering the highest-risk pure-logic functions, including:
 
 | Suite                | What it covers                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------ |
@@ -168,8 +171,9 @@ npm test   # runs test/logic.test.js via node:test (built-in, no extra install)
 | `parseNum`           | `$1,234.56` → `1234.56`, dashes → null, empty/null input                             |
 | `mergePositions`     | Weighted-average cost basis across duplicate ticker rows (Fidelity margin+cash lots) |
 | CSV header detection | Fidelity column-name regexes for symbol, per-share cost, total cost, skip rows       |
+| cache freshness      | `priceFresh` (market-close boundary, weekends), `divsFresh` (ex-date, 7-day fallback) |
 
-**Important:** the test file inlines copies of the functions from `public/app.js` (browser globals can't be imported). When you change a logic function in `app.js`, update the matching copy in `test/logic.test.js` too.
+**Important:** the test file inlines copies of the functions from `public/app.js` and `server.js` (neither can be imported directly). When you change a logic function in either file, update the matching copy in `test/logic.test.js` too.
 
 ## Known limitations
 

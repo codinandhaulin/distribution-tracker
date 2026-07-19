@@ -130,16 +130,56 @@ function writePortfolio(username, tickers) {
 }
 
 // ── Ticker cache ──────────────────────────────────────────────────────
-const CACHE_TTL = 12 * 60 * 60 * 1000; // 12 h
+// Two freshness rules instead of a flat TTL:
+//  • price: prev-close only changes once per trading day — fresh until the
+//    most recent market close (~16:30 ET on weekdays)
+//  • dividends: history is immutable; new declarations only matter once the
+//    next expected ex-date passes — fresh until then (7-day fallback when
+//    no ex-date is known)
+// When only the price is stale, fetchTickerSmart refetches just prev-close
+// (1 Polygon call instead of 3) and merges it into the cached blob.
+const DIV_FALLBACK_TTL = 7 * 24 * 60 * 60 * 1000;
 
-function scGet(symbol) {
+function cacheRow(symbol) {
   const row = stmt.cacheGet.get(symbol);
-  if (!row || Date.now() - row.ts > CACHE_TTL) return null;
+  if (!row) return null;
   try {
-    return JSON.parse(row.data);
+    return { data: JSON.parse(row.data), ts: row.ts };
   } catch {
     return null;
   }
+}
+
+function lastMarketCloseMs(now = Date.now()) {
+  // Read ET wall-clock via the toLocaleString round-trip, find the most
+  // recent weekday 16:30 ET, then shift the wall-clock delta back onto the
+  // real timestamp.
+  // ponytail: ignores market holidays — worst case one redundant 1-call refresh
+  const et = new Date(
+    new Date(now).toLocaleString("en-US", { timeZone: "America/New_York" }),
+  );
+  const close = new Date(et);
+  close.setHours(16, 30, 0, 0); // 16:00 close + 30 min for data to settle
+  if (et < close) close.setDate(close.getDate() - 1);
+  while (close.getDay() === 0 || close.getDay() === 6)
+    close.setDate(close.getDate() - 1);
+  return now - (et - close);
+}
+
+function priceFresh(ts, now = Date.now()) {
+  return ts >= lastMarketCloseMs(now);
+}
+
+function divsFresh(data, ts, now = Date.now()) {
+  if (data.exDividendDate) {
+    const today = new Date(now).toISOString().split("T")[0];
+    return today <= data.exDividendDate;
+  }
+  return now - (data.divTs ?? ts) < DIV_FALLBACK_TTL;
+}
+
+function cacheFresh(row, now = Date.now()) {
+  return !!row && priceFresh(row.ts, now) && divsFresh(row.data, row.ts, now);
 }
 
 function scSet(symbol, data) {
@@ -382,6 +422,33 @@ async function fetchYahooDividendEvents(symbol) {
     .sort((a, b) => b.ex_dividend_date.localeCompare(a.ex_dividend_date));
 }
 
+// dividendhistory.org models upcoming ex/pay dates on the fund's actual
+// published calendar (same-month-last-year pattern), so it knows dates that
+// Polygon/Yahoo won't have until the fund files them. The payout page embeds
+// a JSON blob; upcoming rows are flagged type "u". Only consulted when our
+// own next ex-date is an estimate, so traffic is a few requests a day.
+async function fetchDHUpcoming(symbol) {
+  const res = await fetch(
+    `https://dividendhistory.org/payout/${encodeURIComponent(symbol)}/`,
+    {
+      headers: {
+        Accept: "text/html",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  if (!res.ok) throw new Error(`dividendhistory ${res.status}`);
+  const html = await res.text();
+  const m = html.match(/data-dividend-chart-json>([^<]+)</);
+  if (!m) return null;
+  const rows = JSON.parse(m[1]).dividends || [];
+  const today = new Date().toISOString().split("T")[0];
+  // rows are newest-first; the last upcoming row is the nearest future one
+  return rows.filter((r) => r.type === "u" && r.ex_div > today).pop() || null;
+}
+
 async function fetchFromPolygon(symbol) {
   const [prevClose, divResp, tickerRef] = await Promise.all([
     polyGetRetry(`/v2/aggs/ticker/${symbol}/prev`),
@@ -415,6 +482,49 @@ async function fetchFromPolygon(symbol) {
     }
   }
 
+  if (data.isEstimated) {
+    // No confirmed future dividend from Polygon/Yahoo — see if
+    // dividendhistory.org knows the fund's published calendar.
+    try {
+      const up = await fetchDHUpcoming(symbol);
+      if (up?.ex_div && up?.payday) {
+        console.log(
+          `  [dividendhistory] upcoming for ${symbol}: ex ${up.ex_div} pay ${up.payday}`,
+        );
+        data.exDividendDate = up.ex_div;
+        data.dividendDate = up.payday;
+        if (up.payout > 0) {
+          data.distributionAmount = up.payout;
+          if (data.frequency)
+            data.annualDividendRate = up.payout * data.frequency;
+        }
+      }
+    } catch (err) {
+      console.log(`  [dividendhistory] failed for ${symbol}: ${err.message}`);
+    }
+  }
+
+  return data;
+}
+
+async function fetchTickerSmart(symbol, force) {
+  const row = cacheRow(symbol);
+  if (!force && row && divsFresh(row.data, row.ts)) {
+    // Dividend data still valid — only the price is stale (1 call vs 3).
+    polyCurrentCalls = 1;
+    const prevClose = await polyGetRetry(`/v2/aggs/ticker/${symbol}/prev`);
+    const price = prevClose?.results?.[0]?.c;
+    if (price) {
+      const data = { ...row.data, currentPrice: price };
+      scSet(symbol, data);
+      return data;
+    }
+    // empty prev-close → fall through to a full refetch
+  }
+  polyCurrentCalls = POLY_CALLS_PER_FETCH;
+  const data = await fetchFromPolygon(symbol);
+  data.divTs = Date.now();
+  scSet(symbol, data);
   return data;
 }
 
@@ -425,15 +535,17 @@ async function fetchFromPolygon(symbol) {
 // `POLY_MAX_PER_MIN` per minute. Each uncached fetch makes an estimated
 // `POLY_EST_CALLS_PER_FETCH` Polygon requests (prev, dividends, ticker ref),
 // so compute the minimum interval between dequeues to stay within quota.
+const POLY_CALLS_PER_FETCH = 3; // prev close + dividends + ticker ref
 let polyLastAt = 0,
   polyRunning = false,
-  polyCurrent = null;
+  polyCurrent = null,
+  polyCurrentCalls = POLY_CALLS_PER_FETCH; // 1 when only the price is refetched
 const polyQueue = []; // {symbol, force, resolve, reject}
 
 function polyEnqueue(symbol, force) {
   if (!force) {
-    const cached = scGet(symbol);
-    if (cached) return Promise.resolve(cached);
+    const row = cacheRow(symbol);
+    if (cacheFresh(row)) return Promise.resolve(row.data);
   }
   return new Promise((resolve, reject) => {
     polyQueue.push({ symbol, force, resolve, reject });
@@ -449,10 +561,10 @@ async function drainPolyQueue() {
       const item = polyQueue[0];
       // Re-check cache — a previous dequeue may have fetched this symbol
       if (!item.force) {
-        const cached = scGet(item.symbol);
-        if (cached) {
+        const row = cacheRow(item.symbol);
+        if (cacheFresh(row)) {
           polyQueue.shift();
-          item.resolve(cached);
+          item.resolve(row.data);
           continue;
         }
       }
@@ -462,14 +574,12 @@ async function drainPolyQueue() {
       if (polyLastAt > 0 && polyQueue.length > 1) {
         await new Promise((r) => setTimeout(r, 200));
       }
-      const { symbol, resolve, reject } = polyQueue.shift();
+      const { symbol, force, resolve, reject } = polyQueue.shift();
       polyCurrent = symbol;
       try {
         polyLastAt = Date.now();
         console.log(`  [polygon] fetching ${symbol}`);
-        const data = await fetchFromPolygon(symbol);
-        scSet(symbol, data);
-        resolve(data);
+        resolve(await fetchTickerSmart(symbol, force));
       } catch (err) {
         reject(err);
       } finally {
@@ -535,15 +645,14 @@ app.get("/api/version", (_, res) => {
   res.json({ version: pkg.version });
 });
 
-const POLY_CALLS_PER_FETCH = 3; // prev close + dividends + ticker ref
-
 app.get("/api/queue", (_, res) => {
   // Countdown to the next *ticker* fetch. While a fetch is active its calls
   // grab each token as it refills, so the bucket never accumulates — anchor
-  // to when the current ticker started instead: it consumes
-  // POLY_CALLS_PER_FETCH tokens, so the next one starts ~that many refills later.
+  // to when the current ticker started instead: it consumes `polyCurrentCalls`
+  // tokens (1 for a price-only refresh, 3 for a full fetch), so the next one
+  // starts ~that many refills later.
   const nextInMs = polyCurrent
-    ? Math.max(0, polyLastAt + POLY_CALLS_PER_FETCH * POLY_TOKEN_REFILL_MS - Date.now())
+    ? Math.max(0, polyLastAt + polyCurrentCalls * POLY_TOKEN_REFILL_MS - Date.now())
     : 0;
   res.json({
     pending: polyQueue.length,
