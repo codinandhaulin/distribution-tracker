@@ -444,9 +444,13 @@ async function fetchDHUpcoming(symbol) {
   const m = html.match(/data-dividend-chart-json>([^<]+)</);
   if (!m) return null;
   const rows = JSON.parse(m[1]).dividends || [];
-  const today = new Date().toISOString().split("T")[0];
-  // rows are newest-first; the last upcoming row is the nearest future one
-  return rows.filter((r) => r.type === "u" && r.ex_div > today).pop() || null;
+  // rows are newest-first; type "u" is dividendhistory.org's own "upcoming/
+  // estimated" flag. Don't also require ex_div > today: once that date slips
+  // into the past (site hasn't refreshed yet, or its guess was a few days
+  // early), discarding it just falls back to the cruder same-file
+  // estimateNextExDate(), which skips a whole cycle ahead instead of staying
+  // close to the real date.
+  return rows.filter((r) => r.type === "u").pop() || null;
 }
 
 async function fetchFromPolygon(symbol) {
