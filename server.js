@@ -542,15 +542,32 @@ let polyLastAt = 0,
   polyCurrentCalls = POLY_CALLS_PER_FETCH; // 1 when only the price is refetched
 const polyQueue = []; // {symbol, force, resolve, reject}
 
+// Coalesce concurrent requests for the same symbol. Without this, the
+// page-load Promise.all (fires all tickers in parallel) and a sequential
+// batchFetch (Refresh All / Hard Refresh) that overlaps it each enqueue
+// their own copy of every symbol — the second wave's requests sit queued
+// behind the first, so a tab's own "(i/N)" progress can appear stuck long
+// after the server has moved on to different tickers from the other wave.
+const polyInFlight = new Map(); // symbol -> Promise
+
 function polyEnqueue(symbol, force) {
   if (!force) {
     const row = cacheRow(symbol);
     if (cacheFresh(row)) return Promise.resolve(row.data);
+    const inflight = polyInFlight.get(symbol);
+    if (inflight) return inflight;
   }
-  return new Promise((resolve, reject) => {
+  const p = new Promise((resolve, reject) => {
     polyQueue.push({ symbol, force, resolve, reject });
     drainPolyQueue();
   });
+  if (!force) {
+    polyInFlight.set(symbol, p);
+    p.finally(() => {
+      if (polyInFlight.get(symbol) === p) polyInFlight.delete(symbol);
+    });
+  }
+  return p;
 }
 
 async function drainPolyQueue() {
