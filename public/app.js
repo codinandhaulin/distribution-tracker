@@ -241,6 +241,22 @@ async function refreshAll() {
   btn.disabled = false;
 }
 
+async function hardRefreshAll() {
+  if (!S.tickers.length) return;
+  const n = S.tickers.length;
+  const mins = Math.ceil((n * 3) / 5); // 3 Polygon calls/ticker, 5 calls/min
+  if (
+    !confirm(
+      `Force-refetch all ${n} ticker${n === 1 ? "" : "s"}, bypassing the cache entirely (price + full dividend history)?\n\nThis ignores freshness and re-hits Polygon for everything — about ${mins} minute${mins === 1 ? "" : "s"} at the free-tier rate limit.`,
+    )
+  )
+    return;
+  const btn = document.getElementById("btn-hard-refresh");
+  btn.disabled = true;
+  await batchFetch(S.tickers, true);
+  btn.disabled = false;
+}
+
 // ── Edit modal ─────────────────────────────────────────────────────
 function openEditModal(symbol) {
   const t = S.tickers.find((t) => t.symbol === symbol);

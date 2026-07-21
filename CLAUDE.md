@@ -90,6 +90,7 @@ Polygon's free "Basic" plan is **5 API calls per minute**. Each ticker fetch mak
 - The server retries a single 429 after a 65-second wait before propagating the error
 - Initial import of a large portfolio (38 tickers) takes ~19 minutes on first cold load; all subsequent loads are instant from cache
 - **Refresh All** button (and the 12h auto-refresh timer) sends no `force` flag — the server refetches only what's stale, so it's safe to click anytime and free when nothing changed. The per-row refresh button still sends `force=1` for a true full refetch of that ticker
+- **Hard Refresh** button (`hardRefreshAll()` in app.js) forces every ticker at once, bypassing the cache entirely (price + full dividend history) — confirms first with the estimated wall-clock time (`ceil(n×3/5)` min) since it burns the full Polygon quota regardless of freshness
 - Client-side `batchFetch()` is sequential (no explicit delay) — server response time is the natural pacing
 - Page-load uses `Promise.all` (parallel requests) — cache hits all return instantly; queue handles any cold tickers
 - **`GET /api/queue`** exposes live queue state (`pending`, `current` symbol, `nextInMs`); client polls it every 2s and renders a queue-status card (see UI features below) — this is shared server state, so all connected browsers see the same progress, not just the tab that triggered the fetch. `nextInMs` counts down to the next **ticker** fetch (3 tokens), not the next single token
