@@ -231,14 +231,18 @@ function removeTicker(symbol) {
   render();
 }
 
+function setRefreshButtonsDisabled(disabled) {
+  document.getElementById("btn-refresh").disabled = disabled;
+  document.getElementById("btn-hard-refresh").disabled = disabled;
+}
+
 async function refreshAll() {
   if (!S.tickers.length) return;
-  const btn = document.getElementById("btn-refresh");
-  btn.disabled = true;
+  setRefreshButtonsDisabled(true);
   // No force: the server refetches only what's stale (price after market
   // close, dividends after the next ex-date passes) — fresh entries are free.
   await batchFetch(S.tickers);
-  btn.disabled = false;
+  setRefreshButtonsDisabled(false);
 }
 
 async function hardRefreshAll() {
@@ -251,10 +255,9 @@ async function hardRefreshAll() {
     )
   )
     return;
-  const btn = document.getElementById("btn-hard-refresh");
-  btn.disabled = true;
+  setRefreshButtonsDisabled(true);
   await batchFetch(S.tickers, true);
-  btn.disabled = false;
+  setRefreshButtonsDisabled(false);
 }
 
 // ── Edit modal ─────────────────────────────────────────────────────
